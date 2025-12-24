@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Block Blast - RWD Version</title>
+    <title>Block Blast - Live Stats Ver.</title>
     <style>
         :root {
             --bg-color: #1a1a24;
@@ -16,19 +16,17 @@
             padding: 0;
             background-color: #111;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden; /* 禁止滾動 */
+            overflow: hidden; 
             height: 100vh;
             width: 100vw;
             display: flex;
             justify-content: center;
             align-items: center;
-            /* 電腦端背景裝飾 */
             background-image: radial-gradient(#333 1px, transparent 1px);
             background-size: 30px 30px;
-            touch-action: none; /* 禁止瀏覽器默認手勢 */
+            touch-action: none; 
         }
 
-        /* 遊戲容器：核心適配層 */
         #game-wrapper {
             position: relative;
             background-color: var(--game-bg);
@@ -40,7 +38,7 @@
             align-items: center;
         }
 
-        /* --- 電腦端樣式 (Desktop) --- */
+        /* Desktop Mode */
         body.desktop #game-wrapper {
             width: 480px;
             height: 85vh;
@@ -49,7 +47,7 @@
             border: 4px solid #444;
         }
 
-        /* --- 手機端樣式 (Mobile) --- */
+        /* Mobile Mode */
         body.mobile #game-wrapper {
             width: 100%;
             height: 100%;
@@ -58,27 +56,32 @@
             box-shadow: none;
         }
 
-        /* UI 層 */
         #ui-header {
             width: 100%;
-            padding-top: 40px;
-            padding-bottom: 20px;
+            padding-top: 30px; /* 稍微縮小頂部間距以容納新元素 */
+            padding-bottom: 10px;
             text-align: center;
             pointer-events: none;
             z-index: 5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         h1 {
             margin: 0;
-            font-size: 24px;
+            font-size: 20px;
             color: var(--accent);
             text-transform: uppercase;
             letter-spacing: 2px;
             text-shadow: 0 2px 10px rgba(255, 215, 0, 0.3);
+            margin-bottom: 5px;
         }
 
         .score-container {
-            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         #score {
@@ -86,17 +89,40 @@
             font-weight: 800;
             color: white;
             line-height: 1;
+            transition: transform 0.1s;
+        }
+        #score.pop { transform: scale(1.2); }
+
+        /* 新增：即時方塊統計樣式 */
+        .live-stats {
+            margin-top: 5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+        
+        .live-label {
+            font-size: 12px;
+            color: #aaa;
+            letter-spacing: 1px;
+            font-weight: 600;
         }
 
-        /* Canvas */
+        #live-block-count {
+            font-size: 18px;
+            color: #4CAF50; /* 綠色 */
+            font-weight: bold;
+        }
+
         canvas {
             display: block;
             margin: 0 auto;
-            /* border: 1px solid rgba(255,255,255,0.05); */
             border-radius: 8px;
         }
 
-        /* 設備提示 (Debug用，可選) */
         #device-info {
             position: absolute;
             bottom: 10px;
@@ -106,11 +132,11 @@
             pointer-events: none;
         }
 
-        /* 遊戲結束畫面 */
+        /* --- Game Over Screen Styles --- */
         #game-over-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.9);
+            background: rgba(0,0,0,0.95);
             display: none;
             flex-direction: column;
             justify-content: center;
@@ -120,6 +146,41 @@
             transition: opacity 0.3s;
         }
         #game-over-overlay.show { opacity: 1; }
+
+        .go-title {
+            color: #ff5555; 
+            font-size: 42px; 
+            margin: 0 0 30px 0;
+            text-shadow: 0 0 10px rgba(255, 85, 85, 0.3);
+        }
+
+        .stats-row {
+            display: flex;
+            gap: 40px;
+            margin-bottom: 30px;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-label {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 5px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            color: white;
+            font-size: 36px;
+            font-weight: bold;
+        }
+        
+        #final-blocks { color: #4CAF50; }
 
         .btn-restart {
             background: linear-gradient(45deg, #FFC107, #FF9800);
@@ -131,7 +192,6 @@
             border-radius: 50px;
             cursor: pointer;
             box-shadow: 0 4px 15px rgba(255, 152, 0, 0.4);
-            margin-top: 20px;
             transform: scale(1);
             transition: transform 0.1s;
         }
@@ -139,22 +199,38 @@
 
     </style>
 </head>
-<body class="desktop"> <!-- 預設為 desktop，JS 會自動修正 -->
+<body class="desktop">
 
     <div id="game-wrapper">
         <div id="ui-header">
             <h1>Block Blast</h1>
             <div class="score-container">
                 <span id="score">0</span>
+                
+                <!-- 新增：即時方塊數顯示 -->
+                <div class="live-stats">
+                    <span class="live-label">BLOCKS</span>
+                    <span id="live-block-count">0</span>
+                </div>
             </div>
         </div>
 
         <canvas id="gameCanvas"></canvas>
 
         <div id="game-over-overlay">
-            <h2 style="color: #ff5555; font-size: 42px; margin: 0;">NO MOVES</h2>
-            <p style="color: #aaa; font-size: 18px;">Score</p>
-            <div id="final-score" style="color: white; font-size: 36px; font-weight: bold; margin-bottom: 20px;">0</div>
+            <h2 class="go-title">NO MOVES</h2>
+            
+            <div class="stats-row">
+                <div class="stat-item">
+                    <span class="stat-label">SCORE</span>
+                    <span id="final-score" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">BLOCKS</span>
+                    <span id="final-blocks" class="stat-value">0</span>
+                </div>
+            </div>
+
             <button class="btn-restart" onclick="resetGame()">Try Again</button>
         </div>
         
@@ -162,17 +238,13 @@
     </div>
 
 <script>
-// --- 1. 設備偵測與適配系統 ---
+// --- 1. 設備偵測 ---
 const body = document.body;
 const infoLabel = document.getElementById('device-info');
 let isMobile = false;
 
 function checkDevice() {
-    // 簡單的檢測：檢查 UA 或螢幕寬度
     const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    
-    // 如果是行動裝置 UserAgent 或螢幕寬度小於 768px，視為 Mobile
     if (/android|ipad|iphone|ipod/i.test(userAgent) || window.innerWidth < 768) {
         isMobile = true;
         body.classList.remove('desktop');
@@ -186,18 +258,16 @@ function checkDevice() {
     }
     resize();
 }
+window.addEventListener('resize', checkDevice);
 
-// 監聽螢幕旋轉或視窗縮放
-window.addEventListener('resize', () => {
-    checkDevice(); // 重新檢測
-});
-
-// --- 2. 遊戲參數與常數 ---
+// --- 2. 遊戲變數 ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
+const liveBlocksEl = document.getElementById('live-block-count'); // 新增
 const goOverlay = document.getElementById('game-over-overlay');
 const finalScoreEl = document.getElementById('final-score');
+const finalBlocksEl = document.getElementById('final-blocks');
 
 const GRID_SIZE = 8;
 const COLORS = ["#FF5252", "#4CAF50", "#2196F3", "#FFC107", "#00BCD4", "#E040FB", "#FF9800"];
@@ -208,39 +278,38 @@ const SHAPES = [
     [[0,0],[1,0],[1,1],[2,1]], [[1,0],[2,0],[0,1],[1,1]], [[0,0],[1,0],[2,0],[1,1]]
 ];
 
-let CELL_SIZE = 0;
-let BOARD_W = 0;
-let BOARD_OFFSET_X = 0;
-let BOARD_OFFSET_Y = 20; // 網格距離 Canvas 頂部的距離
-let INVENTORY_Y = 0;
-let BLOCK_SCALE = 0.65; // 底部選項的縮放比
+let CELL_SIZE = 0, BOARD_W = 0, BOARD_OFFSET_X = 0, BOARD_OFFSET_Y = 20, INVENTORY_Y = 0;
+let BLOCK_SCALE = 0.65;
 
 let grid = []; 
 let inventory = []; 
 let score = 0;
-let dragging = null; // 當前拖曳物件
+let blocksUsed = 0; 
+let dragging = null;
 
-// --- 3. 初始化與渲染設置 ---
+let animState = {
+    active: false,
+    startTime: 0,
+    rows: [],
+    cols: [],
+    duration: 500,
+    blockToPlace: null
+};
+
+// --- 3. 初始化 ---
 function resize() {
     const wrapper = document.getElementById('game-wrapper');
     const rect = wrapper.getBoundingClientRect();
-    
-    // 設置 Canvas 內解析度等於容器顯示大小 (解決模糊問題)
     canvas.width = rect.width;
-    canvas.height = rect.height - 100; // 扣除上方 UI 高度
+    canvas.height = rect.height - 130; // 調整高度以適應UI頭部
     
-    // 計算網格大小：取寬度與高度的較小值，保留邊距
     const maxBoardWidth = canvas.width - 40;
-    const maxBoardHeight = canvas.height * 0.55; // 網格佔畫面的 55% 高度
-    
-    // 算出合適的 CELL_SIZE
+    const maxBoardHeight = canvas.height * 0.55;
     CELL_SIZE = Math.floor(Math.min(maxBoardWidth, maxBoardHeight) / GRID_SIZE);
     
     BOARD_W = CELL_SIZE * GRID_SIZE;
     BOARD_OFFSET_X = (canvas.width - BOARD_W) / 2;
     BOARD_OFFSET_Y = 20;
-    
-    // 底部庫存區位置
     INVENTORY_Y = BOARD_OFFSET_Y + BOARD_W + (canvas.height - (BOARD_OFFSET_Y + BOARD_W)) / 2 - (CELL_SIZE * 1.5);
 
     draw();
@@ -250,11 +319,15 @@ function resize() {
 function initGame() {
     grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(null));
     score = 0;
+    blocksUsed = 0;
     scoreEl.innerText = "0";
+    liveBlocksEl.innerText = "0"; // 重置即時顯示
+    
     goOverlay.style.display = 'none';
     goOverlay.classList.remove('show');
+    animState.active = false;
     
-    checkDevice(); // 確保尺寸正確
+    checkDevice();
     spawnBlocks();
     requestAnimationFrame(loop);
 }
@@ -271,28 +344,25 @@ function spawnBlocks() {
         });
     }
     calcInventoryPos();
-    if(checkGameOver()) endGame();
+    if(checkGameOver()) setTimeout(endGame, 100); 
 }
 
 function calcInventoryPos() {
     const sectionW = canvas.width / 3;
     inventory.forEach((b, i) => {
         if(!b) return;
-        // 計算方塊寬高
         let mw = 0, mh = 0;
         b.cells.forEach(([x,y]) => { mw=Math.max(mw,x); mh=Math.max(mh,y); });
         
         const realCell = CELL_SIZE * b.baseScale;
         b.w = (mw+1) * realCell;
         b.h = (mh+1) * realCell;
-        
-        // 居中
         b.x = (sectionW * i) + (sectionW - b.w)/2;
         b.y = INVENTORY_Y;
     });
 }
 
-// --- 4. 遊戲核心邏輯 ---
+// --- 4. 遊戲邏輯 ---
 function canPlace(cells, gc, gr) {
     for(let [x,y] of cells) {
         let nc = gc + x, nr = gr + y;
@@ -301,9 +371,13 @@ function canPlace(cells, gc, gr) {
     return true;
 }
 
-function place(b, gc, gr) {
+function tryPlaceBlock(b, gc, gr, invIndex) {
+    // 成功放置，計數+1
+    blocksUsed++;
+    liveBlocksEl.innerText = blocksUsed; // 即時更新
+
     b.cells.forEach(([x,y]) => grid[gr+y][gc+x] = b.color);
-    // 檢查消除
+    
     let rows=[], cols=[];
     for(let r=0; r<GRID_SIZE; r++) if(grid[r].every(c=>c)) rows.push(r);
     for(let c=0; c<GRID_SIZE; c++) {
@@ -312,24 +386,55 @@ function place(b, gc, gr) {
         if(full) cols.push(c);
     }
     
-    if(rows.length + cols.length > 0) {
-        rows.forEach(r => grid[r].fill(null));
-        cols.forEach(c => { for(let r=0; r<GRID_SIZE; r++) grid[r][c]=null; });
-        // 計分：基本分 + 連擊獎勵
-        let count = rows.length + cols.length;
-        score += count * 10 + (count * (count-1) * 5);
-        scoreEl.innerText = score;
+    inventory[invIndex] = null;
+
+    if(rows.length > 0 || cols.length > 0) {
+        animState.active = true;
+        animState.startTime = Date.now();
+        animState.rows = rows;
+        animState.cols = cols;
+        animState.blockToPlace = b;
+        setTimeout(finalizeClear, animState.duration);
     } else {
         score += b.cells.length;
-        scoreEl.innerText = score;
+        updateScoreDisplay();
+        afterTurn();
     }
 }
 
+function finalizeClear() {
+    animState.rows.forEach(r => grid[r].fill(null));
+    animState.cols.forEach(c => { for(let r=0; r<GRID_SIZE; r++) grid[r][c]=null; });
+    
+    let count = animState.rows.length + animState.cols.length;
+    score += count * 10 + (count * (count-1) * 5);
+    
+    updateScoreDisplay();
+    animState.active = false;
+    animState.rows = [];
+    animState.cols = [];
+    
+    afterTurn();
+}
+
+function afterTurn() {
+    if(inventory.every(x=>x===null)) spawnBlocks();
+    if(checkGameOver()) {
+        setTimeout(endGame, 500);
+    }
+}
+
+function updateScoreDisplay() {
+    scoreEl.innerText = score;
+    scoreEl.classList.remove('pop');
+    void scoreEl.offsetWidth;
+    scoreEl.classList.add('pop');
+}
+
 function checkGameOver() {
-    // 檢查庫存中剩下的方塊，是否完全無法放入
+    if(animState.active) return false;
     const left = inventory.filter(b=>b);
     if(left.length === 0) return false;
-    
     for(let b of left) {
         for(let r=0; r<GRID_SIZE; r++) {
             for(let c=0; c<GRID_SIZE; c++) {
@@ -342,6 +447,8 @@ function checkGameOver() {
 
 function endGame() {
     finalScoreEl.innerText = score;
+    finalBlocksEl.innerText = blocksUsed;
+    
     goOverlay.style.display = 'flex';
     setTimeout(()=> goOverlay.classList.add('show'), 10);
 }
@@ -350,7 +457,7 @@ function resetGame() {
     initGame();
 }
 
-// --- 5. 輸入處理 (Mouse & Touch 分離優化) ---
+// --- 5. 輸入處理 ---
 function getPos(e) {
     const rect = canvas.getBoundingClientRect();
     const cx = e.touches ? e.touches[0].clientX : e.clientX;
@@ -359,26 +466,20 @@ function getPos(e) {
 }
 
 function onDown(e) {
+    if(animState.active) return;
     if(goOverlay.classList.contains('show')) return;
     
     const p = getPos(e);
-    // 檢查點擊庫存
     for(let i=0; i<inventory.length; i++) {
         const b = inventory[i];
         if(!b) continue;
-        // 擴大點擊判定區域
-        const hitX = b.x - 20, hitY = b.y - 20;
-        const hitW = b.w + 40, hitH = b.h + 40;
-        
+        const hitX = b.x - 20, hitY = b.y - 20, hitW = b.w + 40, hitH = b.h + 40;
         if(p.x >= hitX && p.x <= hitX+hitW && p.y >= hitY && p.y <= hitY+hitH) {
-            e.preventDefault(); // 防止手機滾動
+            e.preventDefault();
             dragging = { 
                 idx: i, block: b, 
-                // 記錄抓取點相對於方塊左上角的偏移
-                offsetX: p.x - b.x, 
-                offsetY: p.y - b.y,
-                currentX: p.x, currentY: p.y,
-                isTouch: p.isTouch
+                offsetX: p.x - b.x, offsetY: p.y - b.y,
+                currentX: p.x, currentY: p.y, isTouch: p.isTouch
             };
             break;
         }
@@ -396,35 +497,19 @@ function onMove(e) {
 function onUp(e) {
     if(!dragging) return;
     
-    // 計算放置邏輯
     const b = dragging.block;
-    
-    // 視覺位置 -> 網格位置
-    // 注意：這裡需要根據輸入類型(Touch/Mouse)還原正確的視覺中心
     let visX = dragging.currentX - dragging.offsetX;
     let visY = dragging.currentY - dragging.offsetY;
-    
-    if(dragging.isTouch) {
-        // Touch模式下，因為繪製時上移了，判斷位置時也要對應調整
-        visY -= 80; 
-    }
+    if(dragging.isTouch) visY -= 80;
 
-    // 嘗試吸附
-    // 計算方塊的網格坐標 (假設方塊左上角對齊網格)
     const relX = visX - BOARD_OFFSET_X;
     const relY = visY - BOARD_OFFSET_Y;
-    
     const gc = Math.round(relX / CELL_SIZE);
     const gr = Math.round(relY / CELL_SIZE);
     
     if(canPlace(b.cells, gc, gr)) {
-        place(b, gc, gr);
-        inventory[dragging.idx] = null;
-        
-        if(inventory.every(x=>x===null)) spawnBlocks();
-        else if(checkGameOver()) setTimeout(endGame, 500);
+        tryPlaceBlock(b, gc, gr, dragging.idx);
     }
-    
     dragging = null;
 }
 
@@ -435,7 +520,7 @@ canvas.addEventListener('touchstart', onDown, {passive: false});
 window.addEventListener('touchmove', onMove, {passive: false});
 window.addEventListener('touchend', onUp);
 
-// --- 6. 繪圖循環 ---
+// --- 6. 繪圖 ---
 function drawRoundedRect(ctx, x, y, w, h, r, color) {
     ctx.fillStyle = color;
     ctx.beginPath();
@@ -449,15 +534,12 @@ function drawBlock(cells, ox, oy, size, color, alpha=1) {
     cells.forEach(([x,y]) => {
         const px = ox + x * size;
         const py = oy + y * size;
-        // 繪製圓角方塊
         ctx.beginPath();
         ctx.roundRect(px+1, py+1, size-2, size-2, 6);
         ctx.fill();
-        
-        // 內部高光 (讓方塊看起來有立體感)
         ctx.fillStyle = "rgba(255,255,255,0.2)";
         ctx.beginPath();
-        ctx.roundRect(px+1, py+1, size-2, size/2, 6); // 只有上半部高光
+        ctx.roundRect(px+1, py+1, size-2, size/2, 6);
         ctx.fill();
         ctx.fillStyle = color;
     });
@@ -467,7 +549,7 @@ function drawBlock(cells, ox, oy, size, color, alpha=1) {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // 1. 繪製棋盤背景
+    // Grid BG
     for(let r=0; r<GRID_SIZE; r++) {
         for(let c=0; c<GRID_SIZE; c++) {
             drawRoundedRect(ctx, 
@@ -477,7 +559,7 @@ function draw() {
         }
     }
     
-    // 2. 繪製棋盤上方塊
+    // Placed Blocks
     for(let r=0; r<GRID_SIZE; r++) {
         for(let c=0; c<GRID_SIZE; c++) {
             if(grid[r][c]) {
@@ -489,7 +571,28 @@ function draw() {
         }
     }
     
-    // 3. 繪製庫存方塊
+    // Animation Overlay
+    if(animState.active) {
+        const elapsed = Date.now() - animState.startTime;
+        const alpha = 0.3 + 0.4 * Math.abs(Math.sin(elapsed / 50)); 
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        animState.rows.forEach(r => {
+            const x = BOARD_OFFSET_X;
+            const y = BOARD_OFFSET_Y + r * CELL_SIZE;
+            ctx.beginPath();
+            ctx.roundRect(x, y, BOARD_W, CELL_SIZE, 6);
+            ctx.fill();
+        });
+        animState.cols.forEach(c => {
+            const x = BOARD_OFFSET_X + c * CELL_SIZE;
+            const y = BOARD_OFFSET_Y;
+            ctx.beginPath();
+            ctx.roundRect(x, y, CELL_SIZE, BOARD_W, 6);
+            ctx.fill();
+        });
+    }
+
+    // Inventory
     inventory.forEach((b, i) => {
         if(b && (!dragging || dragging.idx !== i)) {
             const size = CELL_SIZE * b.baseScale;
@@ -497,40 +600,26 @@ function draw() {
         }
     });
     
-    // 4. 繪製拖曳中方塊
+    // Dragging
     if(dragging) {
         const b = dragging.block;
-        // 拖曳位置
         let dx = dragging.currentX - dragging.offsetX;
         let dy = dragging.currentY - dragging.offsetY;
+        if(dragging.isTouch) dy -= 80;
         
-        // **關鍵差異處理**：如果是觸控，將方塊上移 80px，讓手指不擋住視線
-        if(dragging.isTouch) {
-            dy -= 80;
-        }
-        
-        // 計算吸附預覽
         const relX = dx - BOARD_OFFSET_X;
         const relY = dy - BOARD_OFFSET_Y;
         const gc = Math.round(relX / CELL_SIZE);
         const gr = Math.round(relY / CELL_SIZE);
         
-        // 繪製半透明預覽
         if(canPlace(b.cells, gc, gr)) {
-            drawBlock(b.cells, 
-                BOARD_OFFSET_X + gc*CELL_SIZE, 
-                BOARD_OFFSET_Y + gr*CELL_SIZE, 
-                CELL_SIZE, "#FFFFFF", 0.3);
+            drawBlock(b.cells, BOARD_OFFSET_X + gc*CELL_SIZE, BOARD_OFFSET_Y + gr*CELL_SIZE, CELL_SIZE, "#FFFFFF", 0.3);
         }
         
-        // 繪製本體 (放大 1.1 倍表示抓取中)
-        // 陰影
         ctx.shadowColor = "rgba(0,0,0,0.5)";
         ctx.shadowBlur = 15;
         ctx.shadowOffsetY = 15;
-        
         drawBlock(b.cells, dx, dy, CELL_SIZE, b.color);
-        
         ctx.shadowColor = "transparent";
     }
 }
@@ -540,7 +629,6 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-// 啟動
 initGame();
 
 </script>
