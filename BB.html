@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Block Blast - High Score Ver.</title>
+    <title>Block Blast - Final Polish Ver.</title>
     <style>
         :root {
             --bg-color: #1a1a24;
             --game-bg: #252530;
-            --accent: #ffd700;
+            --accent: #ffd700; /* 金色主題 */
+            --accent-gradient: linear-gradient(45deg, #FFC107, #FF9800);
         }
 
         body {
@@ -93,7 +94,6 @@
         }
         #score.pop { transform: scale(1.2); }
 
-        /* 新增：統計數據容器 (讓 Blocks 和 Best 並排) */
         .stats-row-container {
             margin-top: 8px;
             display: flex;
@@ -118,13 +118,13 @@
 
         #live-block-count {
             font-size: 16px;
-            color: #4CAF50; /* 綠色 */
+            color: #4CAF50;
             font-weight: bold;
         }
 
         #best-score {
             font-size: 16px;
-            color: #FFD700; /* 金色 */
+            color: #FFD700;
             font-weight: bold;
         }
 
@@ -141,10 +141,52 @@
             color: rgba(255,255,255,0.2);
             font-size: 12px;
             pointer-events: none;
+            display: none; /* 隱藏調試信息以保持畫面乾淨 */
         }
 
-        /* --- Game Over Screen Styles --- */
-        #game-over-overlay {
+        /* --- Manual Restart Button (Revised Style) --- */
+        #btn-manual-restart {
+            position: absolute;
+            bottom: 20px; /* 固定在底部 */
+            left: 50%;
+            transform: translateX(-50%);
+            
+            /* 新風格：鏤空金色，與主題一致 */
+            background: transparent;
+            color: var(--accent);
+            border: 2px solid var(--accent);
+            
+            padding: 6px 18px; /* 稍微縮小高度 */
+            border-radius: 50px;
+            font-size: 13px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            cursor: pointer;
+            z-index: 50;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            opacity: 0.7; /* 預設稍微透明，減少干擾 */
+            
+            /* 防止被當作方塊選取 */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #btn-manual-restart:hover {
+            background: var(--accent);
+            color: #252530; /* 深色文字 */
+            opacity: 1;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+        }
+
+        #btn-manual-restart:active {
+            transform: translateX(-50%) scale(0.95);
+        }
+
+        /* --- Overlays (Game Over & Confirm) --- */
+        .overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0,0,0,0.95);
@@ -156,13 +198,25 @@
             opacity: 0;
             transition: opacity 0.3s;
         }
-        #game-over-overlay.show { opacity: 1; }
+        .overlay.show { opacity: 1; }
 
         .go-title {
             color: #ff5555; 
             font-size: 42px; 
             margin: 0 0 30px 0;
             text-shadow: 0 0 10px rgba(255, 85, 85, 0.3);
+            text-align: center;
+        }
+
+        .confirm-title {
+            color: #FFC107;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        .confirm-desc {
+            color: #aaa;
+            margin-bottom: 40px;
+            font-size: 16px;
         }
 
         .stats-row {
@@ -192,10 +246,10 @@
         }
         
         #final-blocks { color: #4CAF50; }
-        #final-best { color: #FFD700; } /* 結束畫面顯示最高分顏色 */
+        #final-best { color: #FFD700; }
 
         .btn-restart {
-            background: linear-gradient(45deg, #FFC107, #FF9800);
+            background: var(--accent-gradient);
             border: none;
             padding: 15px 50px;
             font-size: 20px;
@@ -209,6 +263,19 @@
         }
         .btn-restart:active { transform: scale(0.95); }
 
+        .confirm-actions {
+            display: flex;
+            gap: 20px;
+        }
+        .btn-yes {
+            background: linear-gradient(45deg, #FF5252, #FF1744);
+            box-shadow: 0 4px 15px rgba(255, 82, 82, 0.4);
+        }
+        .btn-no {
+            background: #444;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        }
+
     </style>
 </head>
 <body class="desktop">
@@ -218,8 +285,6 @@
             <h1>Block Blast</h1>
             <div class="score-container">
                 <span id="score">0</span>
-                
-                <!-- 新增：統計數據容器，包含 Blocks 和 Best -->
                 <div class="stats-row-container">
                     <div class="live-stats">
                         <span class="live-label">BLOCKS</span>
@@ -235,7 +300,29 @@
 
         <canvas id="gameCanvas"></canvas>
 
-        <div id="game-over-overlay">
+        <!-- 手動重玩按鈕 (風格已統一) -->
+        <button id="btn-manual-restart" onclick="showRestartConfirm()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 4v6h-6"></path>
+                <path d="M1 20v-6h6"></path>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            RESTART
+        </button>
+
+        <!-- 確認重玩視窗 -->
+        <div id="confirm-overlay" class="overlay">
+            <h2 class="go-title confirm-title">RESTART?</h2>
+            <p class="confirm-desc">Progress will be lost.</p>
+            
+            <div class="confirm-actions">
+                <button class="btn-restart btn-yes" onclick="confirmRestart()">YES</button>
+                <button class="btn-restart btn-no" onclick="hideRestartConfirm()">NO</button>
+            </div>
+        </div>
+
+        <!-- 遊戲結束視窗 -->
+        <div id="game-over-overlay" class="overlay">
             <h2 class="go-title">NO MOVES</h2>
             
             <div class="stats-row">
@@ -248,7 +335,6 @@
                     <span id="final-best" class="stat-value">0</span>
                 </div>
             </div>
-            <!-- 單獨一行顯示 Blocks，避免太擠 -->
             <div class="stats-row" style="margin-top: -15px; margin-bottom: 30px;">
                 <div class="stat-item">
                      <span class="stat-label">BLOCKS CLEARED</span>
@@ -290,11 +376,12 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 const liveBlocksEl = document.getElementById('live-block-count');
-const bestScoreEl = document.getElementById('best-score'); // 新增：最高分DOM
+const bestScoreEl = document.getElementById('best-score'); 
 const goOverlay = document.getElementById('game-over-overlay');
+const confirmOverlay = document.getElementById('confirm-overlay');
 const finalScoreEl = document.getElementById('final-score');
 const finalBlocksEl = document.getElementById('final-blocks');
-const finalBestEl = document.getElementById('final-best'); // 新增：結束畫面最高分DOM
+const finalBestEl = document.getElementById('final-best'); 
 
 const GRID_SIZE = 8;
 const COLORS = ["#FF5252", "#4CAF50", "#2196F3", "#FFC107", "#00BCD4", "#E040FB", "#FF9800"];
@@ -311,11 +398,10 @@ let BLOCK_SCALE = 0.65;
 let grid = []; 
 let inventory = []; 
 let score = 0;
-let bestScore = 0; // 新增：最高分變數
+let bestScore = 0; 
 let blocksUsed = 0; 
 let dragging = null;
 
-// 新增：LocalStorage Key
 const STORAGE_KEY = 'block_blast_best_score_v1';
 
 let animState = {
@@ -341,13 +427,19 @@ function resize() {
     BOARD_W = CELL_SIZE * GRID_SIZE;
     BOARD_OFFSET_X = (canvas.width - BOARD_W) / 2;
     BOARD_OFFSET_Y = 20;
-    INVENTORY_Y = BOARD_OFFSET_Y + BOARD_W + (canvas.height - (BOARD_OFFSET_Y + BOARD_W)) / 2 - (CELL_SIZE * 1.5);
+
+    // --- 關鍵修改：預留底部空間 ---
+    // 計算剩餘空間時，我們扣除底部 60px (BUTTON_RESERVE_SPACE)，確保方塊不會生成在按鈕底下
+    const BUTTON_RESERVE_SPACE = 60; 
+    const remainingHeight = canvas.height - BUTTON_RESERVE_SPACE - (BOARD_OFFSET_Y + BOARD_W);
+    
+    // 將方塊區域置中於「剩餘的可用空間」中
+    INVENTORY_Y = (BOARD_OFFSET_Y + BOARD_W) + (remainingHeight / 2) - (CELL_SIZE * 1.5);
 
     draw();
     if(inventory.length > 0) calcInventoryPos();
 }
 
-// 新增：讀取最高分
 function loadBestScore() {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
@@ -363,13 +455,16 @@ function initGame() {
     score = 0;
     blocksUsed = 0;
     
-    loadBestScore(); // 確保每次開始都載入最新的（防止多視窗不同步）
+    loadBestScore();
     
     scoreEl.innerText = "0";
     liveBlocksEl.innerText = "0";
     
     goOverlay.style.display = 'none';
     goOverlay.classList.remove('show');
+    confirmOverlay.style.display = 'none';
+    confirmOverlay.classList.remove('show');
+
     animState.active = false;
     
     checkDevice();
@@ -474,7 +569,6 @@ function updateScoreDisplay() {
     void scoreEl.offsetWidth;
     scoreEl.classList.add('pop');
 
-    // 新增：即時檢查是否打破紀錄
     if (score > bestScore) {
         bestScore = score;
         bestScoreEl.innerText = bestScore;
@@ -497,14 +591,13 @@ function checkGameOver() {
 }
 
 function endGame() {
-    // 遊戲結束時再次確認儲存
     if (score > bestScore) {
         bestScore = score;
         localStorage.setItem(STORAGE_KEY, bestScore);
     }
 
     finalScoreEl.innerText = score;
-    finalBestEl.innerText = bestScore; // 顯示最高分
+    finalBestEl.innerText = bestScore;
     finalBlocksEl.innerText = blocksUsed;
     
     goOverlay.style.display = 'flex';
@@ -513,6 +606,25 @@ function endGame() {
 
 function resetGame() {
     initGame();
+}
+
+function showRestartConfirm() {
+    if (!goOverlay.classList.contains('show')) {
+        confirmOverlay.style.display = 'flex';
+        setTimeout(() => confirmOverlay.classList.add('show'), 10);
+    }
+}
+
+function hideRestartConfirm() {
+    confirmOverlay.classList.remove('show');
+    setTimeout(() => {
+        confirmOverlay.style.display = 'none';
+    }, 300);
+}
+
+function confirmRestart() {
+    hideRestartConfirm();
+    resetGame();
 }
 
 // --- 5. 輸入處理 ---
@@ -525,7 +637,7 @@ function getPos(e) {
 
 function onDown(e) {
     if(animState.active) return;
-    if(goOverlay.classList.contains('show')) return;
+    if(goOverlay.classList.contains('show') || confirmOverlay.classList.contains('show')) return;
     
     const p = getPos(e);
     for(let i=0; i<inventory.length; i++) {
@@ -687,7 +799,6 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-// 首次加載
 loadBestScore();
 initGame();
 
