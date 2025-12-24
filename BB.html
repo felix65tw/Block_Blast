@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Block Blast - Live Stats Ver.</title>
+    <title>Block Blast - High Score Ver.</title>
     <style>
         :root {
             --bg-color: #1a1a24;
@@ -58,7 +58,7 @@
 
         #ui-header {
             width: 100%;
-            padding-top: 30px; /* 稍微縮小頂部間距以容納新元素 */
+            padding-top: 30px; 
             padding-bottom: 10px;
             text-align: center;
             pointer-events: none;
@@ -93,9 +93,14 @@
         }
         #score.pop { transform: scale(1.2); }
 
-        /* 新增：即時方塊統計樣式 */
+        /* 新增：統計數據容器 (讓 Blocks 和 Best 並排) */
+        .stats-row-container {
+            margin-top: 8px;
+            display: flex;
+            gap: 12px;
+        }
+
         .live-stats {
-            margin-top: 5px;
             display: flex;
             align-items: center;
             gap: 6px;
@@ -105,15 +110,21 @@
         }
         
         .live-label {
-            font-size: 12px;
+            font-size: 11px;
             color: #aaa;
             letter-spacing: 1px;
             font-weight: 600;
         }
 
         #live-block-count {
-            font-size: 18px;
+            font-size: 16px;
             color: #4CAF50; /* 綠色 */
+            font-weight: bold;
+        }
+
+        #best-score {
+            font-size: 16px;
+            color: #FFD700; /* 金色 */
             font-weight: bold;
         }
 
@@ -181,6 +192,7 @@
         }
         
         #final-blocks { color: #4CAF50; }
+        #final-best { color: #FFD700; } /* 結束畫面顯示最高分顏色 */
 
         .btn-restart {
             background: linear-gradient(45deg, #FFC107, #FF9800);
@@ -207,10 +219,16 @@
             <div class="score-container">
                 <span id="score">0</span>
                 
-                <!-- 新增：即時方塊數顯示 -->
-                <div class="live-stats">
-                    <span class="live-label">BLOCKS</span>
-                    <span id="live-block-count">0</span>
+                <!-- 新增：統計數據容器，包含 Blocks 和 Best -->
+                <div class="stats-row-container">
+                    <div class="live-stats">
+                        <span class="live-label">BLOCKS</span>
+                        <span id="live-block-count">0</span>
+                    </div>
+                    <div class="live-stats">
+                        <span class="live-label">BEST</span>
+                        <span id="best-score">0</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -226,8 +244,15 @@
                     <span id="final-score" class="stat-value">0</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-label">BLOCKS</span>
-                    <span id="final-blocks" class="stat-value">0</span>
+                    <span class="stat-label">BEST</span>
+                    <span id="final-best" class="stat-value">0</span>
+                </div>
+            </div>
+            <!-- 單獨一行顯示 Blocks，避免太擠 -->
+            <div class="stats-row" style="margin-top: -15px; margin-bottom: 30px;">
+                <div class="stat-item">
+                     <span class="stat-label">BLOCKS CLEARED</span>
+                     <span id="final-blocks" class="stat-value" style="font-size: 28px;">0</span>
                 </div>
             </div>
 
@@ -264,10 +289,12 @@ window.addEventListener('resize', checkDevice);
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
-const liveBlocksEl = document.getElementById('live-block-count'); // 新增
+const liveBlocksEl = document.getElementById('live-block-count');
+const bestScoreEl = document.getElementById('best-score'); // 新增：最高分DOM
 const goOverlay = document.getElementById('game-over-overlay');
 const finalScoreEl = document.getElementById('final-score');
 const finalBlocksEl = document.getElementById('final-blocks');
+const finalBestEl = document.getElementById('final-best'); // 新增：結束畫面最高分DOM
 
 const GRID_SIZE = 8;
 const COLORS = ["#FF5252", "#4CAF50", "#2196F3", "#FFC107", "#00BCD4", "#E040FB", "#FF9800"];
@@ -284,8 +311,12 @@ let BLOCK_SCALE = 0.65;
 let grid = []; 
 let inventory = []; 
 let score = 0;
+let bestScore = 0; // 新增：最高分變數
 let blocksUsed = 0; 
 let dragging = null;
+
+// 新增：LocalStorage Key
+const STORAGE_KEY = 'block_blast_best_score_v1';
 
 let animState = {
     active: false,
@@ -301,7 +332,7 @@ function resize() {
     const wrapper = document.getElementById('game-wrapper');
     const rect = wrapper.getBoundingClientRect();
     canvas.width = rect.width;
-    canvas.height = rect.height - 130; // 調整高度以適應UI頭部
+    canvas.height = rect.height - 130; 
     
     const maxBoardWidth = canvas.width - 40;
     const maxBoardHeight = canvas.height * 0.55;
@@ -316,12 +347,26 @@ function resize() {
     if(inventory.length > 0) calcInventoryPos();
 }
 
+// 新增：讀取最高分
+function loadBestScore() {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+        bestScore = parseInt(saved, 10);
+    } else {
+        bestScore = 0;
+    }
+    bestScoreEl.innerText = bestScore;
+}
+
 function initGame() {
     grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(null));
     score = 0;
     blocksUsed = 0;
+    
+    loadBestScore(); // 確保每次開始都載入最新的（防止多視窗不同步）
+    
     scoreEl.innerText = "0";
-    liveBlocksEl.innerText = "0"; // 重置即時顯示
+    liveBlocksEl.innerText = "0";
     
     goOverlay.style.display = 'none';
     goOverlay.classList.remove('show');
@@ -372,9 +417,8 @@ function canPlace(cells, gc, gr) {
 }
 
 function tryPlaceBlock(b, gc, gr, invIndex) {
-    // 成功放置，計數+1
     blocksUsed++;
-    liveBlocksEl.innerText = blocksUsed; // 即時更新
+    liveBlocksEl.innerText = blocksUsed;
 
     b.cells.forEach(([x,y]) => grid[gr+y][gc+x] = b.color);
     
@@ -429,6 +473,13 @@ function updateScoreDisplay() {
     scoreEl.classList.remove('pop');
     void scoreEl.offsetWidth;
     scoreEl.classList.add('pop');
+
+    // 新增：即時檢查是否打破紀錄
+    if (score > bestScore) {
+        bestScore = score;
+        bestScoreEl.innerText = bestScore;
+        localStorage.setItem(STORAGE_KEY, bestScore);
+    }
 }
 
 function checkGameOver() {
@@ -446,7 +497,14 @@ function checkGameOver() {
 }
 
 function endGame() {
+    // 遊戲結束時再次確認儲存
+    if (score > bestScore) {
+        bestScore = score;
+        localStorage.setItem(STORAGE_KEY, bestScore);
+    }
+
     finalScoreEl.innerText = score;
+    finalBestEl.innerText = bestScore; // 顯示最高分
     finalBlocksEl.innerText = blocksUsed;
     
     goOverlay.style.display = 'flex';
@@ -629,6 +687,8 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
+// 首次加載
+loadBestScore();
 initGame();
 
 </script>
