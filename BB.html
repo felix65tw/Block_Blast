@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Block Blast - Tuned Audio Ver.</title>
+    <title>Block Blast - Mobile Audio Ver.</title>
     <style>
         :root {
             --bg-color: #1a1a24;
@@ -356,25 +356,33 @@ const SoundManager = {
         this.playNote(1046.50, type, t + 0.20, 0.6, vol);
     },
 
-    // 3. 遊戲結束：【修正版】
-    // 移除了 55Hz，改為 110Hz + 165Hz，聲音更清晰有力
+    // 3. 遊戲結束：【手機/喇叭優化版】
+    // 頻率控制在 130Hz - 400Hz 之間，確保小喇叭能聽清楚
     playGameOver: function() {
         if (!this.ctx) this.init();
         const t = this.ctx.currentTime;
-        const type = 'sawtooth'; // 鋸齒波 (像大提琴)
+        const type = 'sawtooth'; // 鋸齒波，穿透力強
         
-        // 旋律線
-        this.playNote(329.63, type, t + 0.0, 1.5, 0.35); // E4
-        this.playNote(261.63, type, t + 0.2, 1.5, 0.35); // C4
-        this.playNote(220.00, type, t + 0.4, 1.5, 0.35); // A3
-        this.playNote(174.61, type, t + 0.6, 2.0, 0.35); // F3
-        this.playNote(164.81, type, t + 0.8, 2.0, 0.35); // E3
+        // 降低音量係數，避免爆音，但保持旋律清晰
+        const melodyVol = 0.25; 
+        const chordVol = 0.3;   
+        
+        // 旋律：半音階下行 (Chromatic Descent) - 表現悲劇感
+        // G4 -> F#4 -> F4 -> Eb4
+        this.playNote(392.00, type, t + 0.0, 0.6, melodyVol); // G4
+        this.playNote(369.99, type, t + 0.2, 0.6, melodyVol); // F#4
+        this.playNote(349.23, type, t + 0.4, 0.6, melodyVol); // F4
+        this.playNote(311.13, type, t + 0.6, 0.6, melodyVol); // Eb4
 
-        // 結尾重擊 (升級版)
-        // 110Hz (A2) + 164.81Hz (E3) = 強力和弦 (Power Chord)
-        // 這樣聽起來很厚實，但不會因為頻率太低而消失
-        this.playNote(110.00, type, t + 1.0, 3.0, 0.5); // A2 (Main Bass)
-        this.playNote(164.81, type, t + 1.0, 3.0, 0.4); // E3 (Fifth - adds punch)
+        // 結局和弦：C Minor (C3 - Eb3 - G3)
+        // 最低音 C3 (130Hz) 是手機喇叭能發出聲音的有效下限
+        // 三個音一起發聲，營造厚實的悲亢感
+        const endT = t + 0.8;
+        const endDur = 2.5;
+        
+        this.playNote(130.81, type, endT, endDur, chordVol); // C3 (Root)
+        this.playNote(155.56, type, endT, endDur, chordVol); // Eb3 (Minor 3rd)
+        this.playNote(196.00, type, endT, endDur, chordVol); // G3 (5th)
     }
 };
 
@@ -634,7 +642,6 @@ function checkGameOver() {
 }
 
 function endGame() {
-    // 播放音效
     SoundManager.playGameOver();
 
     if (score > bestScore) {
