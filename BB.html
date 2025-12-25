@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Block Blast - Final Polish Ver.</title>
+    <title>Block Blast - Tuned Audio Ver.</title>
     <style>
         :root {
             --bg-color: #1a1a24;
             --game-bg: #252530;
-            --accent: #ffd700; /* 金色主題 */
+            --accent: #ffd700;
             --accent-gradient: linear-gradient(45deg, #FFC107, #FF9800);
         }
 
@@ -39,7 +39,6 @@
             align-items: center;
         }
 
-        /* Desktop Mode */
         body.desktop #game-wrapper {
             width: 480px;
             height: 85vh;
@@ -48,7 +47,6 @@
             border: 4px solid #444;
         }
 
-        /* Mobile Mode */
         body.mobile #game-wrapper {
             width: 100%;
             height: 100%;
@@ -116,17 +114,8 @@
             font-weight: 600;
         }
 
-        #live-block-count {
-            font-size: 16px;
-            color: #4CAF50;
-            font-weight: bold;
-        }
-
-        #best-score {
-            font-size: 16px;
-            color: #FFD700;
-            font-weight: bold;
-        }
+        #live-block-count { font-size: 16px; color: #4CAF50; font-weight: bold; }
+        #best-score { font-size: 16px; color: #FFD700; font-weight: bold; }
 
         canvas {
             display: block;
@@ -134,29 +123,15 @@
             border-radius: 8px;
         }
 
-        #device-info {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            color: rgba(255,255,255,0.2);
-            font-size: 12px;
-            pointer-events: none;
-            display: none; /* 隱藏調試信息以保持畫面乾淨 */
-        }
-
-        /* --- Manual Restart Button (Revised Style) --- */
         #btn-manual-restart {
             position: absolute;
-            bottom: 20px; /* 固定在底部 */
+            bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            
-            /* 新風格：鏤空金色，與主題一致 */
             background: transparent;
             color: var(--accent);
             border: 2px solid var(--accent);
-            
-            padding: 6px 18px; /* 稍微縮小高度 */
+            padding: 6px 18px;
             border-radius: 50px;
             font-size: 13px;
             font-weight: bold;
@@ -167,16 +142,14 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            opacity: 0.7; /* 預設稍微透明，減少干擾 */
-            
-            /* 防止被當作方塊選取 */
+            opacity: 0.7;
             user-select: none;
             -webkit-user-select: none;
         }
 
         #btn-manual-restart:hover {
             background: var(--accent);
-            color: #252530; /* 深色文字 */
+            color: #252530;
             opacity: 1;
             box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
         }
@@ -185,7 +158,6 @@
             transform: translateX(-50%) scale(0.95);
         }
 
-        /* --- Overlays (Game Over & Confirm) --- */
         .overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -231,19 +203,8 @@
             align-items: center;
         }
 
-        .stat-label {
-            color: #888;
-            font-size: 14px;
-            margin-bottom: 5px;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-        }
-
-        .stat-value {
-            color: white;
-            font-size: 36px;
-            font-weight: bold;
-        }
+        .stat-label { color: #888; font-size: 14px; margin-bottom: 5px; text-transform: uppercase; }
+        .stat-value { color: white; font-size: 36px; font-weight: bold; }
         
         #final-blocks { color: #4CAF50; }
         #final-best { color: #FFD700; }
@@ -267,15 +228,10 @@
             display: flex;
             gap: 20px;
         }
-        .btn-yes {
-            background: linear-gradient(45deg, #FF5252, #FF1744);
-            box-shadow: 0 4px 15px rgba(255, 82, 82, 0.4);
-        }
-        .btn-no {
-            background: #444;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-        }
+        .btn-yes { background: linear-gradient(45deg, #FF5252, #FF1744); box-shadow: 0 4px 15px rgba(255, 82, 82, 0.4); }
+        .btn-no { background: #444; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
 
+        #device-info { display: none; }
     </style>
 </head>
 <body class="desktop">
@@ -300,7 +256,6 @@
 
         <canvas id="gameCanvas"></canvas>
 
-        <!-- 手動重玩按鈕 (風格已統一) -->
         <button id="btn-manual-restart" onclick="showRestartConfirm()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M23 4v6h-6"></path>
@@ -310,21 +265,17 @@
             RESTART
         </button>
 
-        <!-- 確認重玩視窗 -->
         <div id="confirm-overlay" class="overlay">
             <h2 class="go-title confirm-title">RESTART?</h2>
             <p class="confirm-desc">Progress will be lost.</p>
-            
             <div class="confirm-actions">
                 <button class="btn-restart btn-yes" onclick="confirmRestart()">YES</button>
                 <button class="btn-restart btn-no" onclick="hideRestartConfirm()">NO</button>
             </div>
         </div>
 
-        <!-- 遊戲結束視窗 -->
         <div id="game-over-overlay" class="overlay">
             <h2 class="go-title">NO MOVES</h2>
-            
             <div class="stats-row">
                 <div class="stat-item">
                     <span class="stat-label">SCORE</span>
@@ -341,7 +292,6 @@
                      <span id="final-blocks" class="stat-value" style="font-size: 28px;">0</span>
                 </div>
             </div>
-
             <button class="btn-restart" onclick="resetGame()">Try Again</button>
         </div>
         
@@ -349,7 +299,88 @@
     </div>
 
 <script>
-// --- 1. 設備偵測 ---
+// ==========================================
+// 0. 音效系統 (Web Audio API)
+// ==========================================
+const SoundManager = {
+    ctx: null,
+    
+    init: function() {
+        if (!this.ctx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+        }
+    },
+    
+    resume: function() {
+        if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    },
+
+    playNote: function(freq, type, time, dur, vol) {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        
+        osc.type = type;
+        osc.frequency.value = freq;
+        
+        gain.gain.setValueAtTime(0, time);
+        gain.gain.linearRampToValueAtTime(vol, time + 0.05); 
+        gain.gain.exponentialRampToValueAtTime(0.001, time + dur); 
+        
+        osc.start(time);
+        osc.stop(time + dur);
+    },
+
+    // 1. 放置方塊
+    playPlace: function() {
+        if (!this.ctx) this.init();
+        this.playNote(600, 'sine', this.ctx.currentTime, 0.1, 0.1);
+    },
+
+    // 2. 消除行
+    playClear: function() {
+        if (!this.ctx) this.init();
+        const t = this.ctx.currentTime;
+        const vol = 0.1;
+        const type = 'sine'; 
+        
+        this.playNote(523.25, type, t, 0.4, vol);        
+        this.playNote(659.25, type, t + 0.05, 0.4, vol); 
+        this.playNote(783.99, type, t + 0.10, 0.4, vol); 
+        this.playNote(987.77, type, t + 0.15, 0.5, vol); 
+        this.playNote(1046.50, type, t + 0.20, 0.6, vol);
+    },
+
+    // 3. 遊戲結束：【修正版】
+    // 移除了 55Hz，改為 110Hz + 165Hz，聲音更清晰有力
+    playGameOver: function() {
+        if (!this.ctx) this.init();
+        const t = this.ctx.currentTime;
+        const type = 'sawtooth'; // 鋸齒波 (像大提琴)
+        
+        // 旋律線
+        this.playNote(329.63, type, t + 0.0, 1.5, 0.35); // E4
+        this.playNote(261.63, type, t + 0.2, 1.5, 0.35); // C4
+        this.playNote(220.00, type, t + 0.4, 1.5, 0.35); // A3
+        this.playNote(174.61, type, t + 0.6, 2.0, 0.35); // F3
+        this.playNote(164.81, type, t + 0.8, 2.0, 0.35); // E3
+
+        // 結尾重擊 (升級版)
+        // 110Hz (A2) + 164.81Hz (E3) = 強力和弦 (Power Chord)
+        // 這樣聽起來很厚實，但不會因為頻率太低而消失
+        this.playNote(110.00, type, t + 1.0, 3.0, 0.5); // A2 (Main Bass)
+        this.playNote(164.81, type, t + 1.0, 3.0, 0.4); // E3 (Fifth - adds punch)
+    }
+};
+
+// ==========================================
+// 1. 設備偵測與 DOM 元素獲取
+// ==========================================
 const body = document.body;
 const infoLabel = document.getElementById('device-info');
 let isMobile = false;
@@ -371,7 +402,9 @@ function checkDevice() {
 }
 window.addEventListener('resize', checkDevice);
 
-// --- 2. 遊戲變數 ---
+// ==========================================
+// 2. 遊戲變數定義
+// ==========================================
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
@@ -413,7 +446,9 @@ let animState = {
     blockToPlace: null
 };
 
-// --- 3. 初始化 ---
+// ==========================================
+// 3. 核心初始化
+// ==========================================
 function resize() {
     const wrapper = document.getElementById('game-wrapper');
     const rect = wrapper.getBoundingClientRect();
@@ -428,12 +463,8 @@ function resize() {
     BOARD_OFFSET_X = (canvas.width - BOARD_W) / 2;
     BOARD_OFFSET_Y = 20;
 
-    // --- 關鍵修改：預留底部空間 ---
-    // 計算剩餘空間時，我們扣除底部 60px (BUTTON_RESERVE_SPACE)，確保方塊不會生成在按鈕底下
     const BUTTON_RESERVE_SPACE = 60; 
     const remainingHeight = canvas.height - BUTTON_RESERVE_SPACE - (BOARD_OFFSET_Y + BOARD_W);
-    
-    // 將方塊區域置中於「剩餘的可用空間」中
     INVENTORY_Y = (BOARD_OFFSET_Y + BOARD_W) + (remainingHeight / 2) - (CELL_SIZE * 1.5);
 
     draw();
@@ -442,11 +473,7 @@ function resize() {
 
 function loadBestScore() {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-        bestScore = parseInt(saved, 10);
-    } else {
-        bestScore = 0;
-    }
+    bestScore = saved ? parseInt(saved, 10) : 0;
     bestScoreEl.innerText = bestScore;
 }
 
@@ -467,6 +494,8 @@ function initGame() {
 
     animState.active = false;
     
+    SoundManager.init();
+
     checkDevice();
     spawnBlocks();
     requestAnimationFrame(loop);
@@ -502,11 +531,16 @@ function calcInventoryPos() {
     });
 }
 
-// --- 4. 遊戲邏輯 ---
+// ==========================================
+// 4. 遊戲邏輯
+// ==========================================
 function canPlace(cells, gc, gr) {
     for(let [x,y] of cells) {
-        let nc = gc + x, nr = gr + y;
-        if(nc<0 || nc>=GRID_SIZE || nr<0 || nr>=GRID_SIZE || grid[nr][nc]) return false;
+        let nc = gc + x;
+        let nr = gr + y;
+        if(nc < 0 || nc >= GRID_SIZE || nr < 0 || nr >= GRID_SIZE || grid[nr][nc]) {
+            return false;
+        }
     }
     return true;
 }
@@ -518,7 +552,10 @@ function tryPlaceBlock(b, gc, gr, invIndex) {
     b.cells.forEach(([x,y]) => grid[gr+y][gc+x] = b.color);
     
     let rows=[], cols=[];
-    for(let r=0; r<GRID_SIZE; r++) if(grid[r].every(c=>c)) rows.push(r);
+    
+    for(let r=0; r<GRID_SIZE; r++) {
+        if(grid[r].every(c => c)) rows.push(r);
+    }
     for(let c=0; c<GRID_SIZE; c++) {
         let full=true;
         for(let r=0; r<GRID_SIZE; r++) if(!grid[r][c]) full=false;
@@ -528,6 +565,8 @@ function tryPlaceBlock(b, gc, gr, invIndex) {
     inventory[invIndex] = null;
 
     if(rows.length > 0 || cols.length > 0) {
+        SoundManager.playClear();
+
         animState.active = true;
         animState.startTime = Date.now();
         animState.rows = rows;
@@ -535,6 +574,8 @@ function tryPlaceBlock(b, gc, gr, invIndex) {
         animState.blockToPlace = b;
         setTimeout(finalizeClear, animState.duration);
     } else {
+        SoundManager.playPlace();
+
         score += b.cells.length;
         updateScoreDisplay();
         afterTurn();
@@ -557,7 +598,8 @@ function finalizeClear() {
 }
 
 function afterTurn() {
-    if(inventory.every(x=>x===null)) spawnBlocks();
+    if(inventory.every(x => x === null)) spawnBlocks();
+    
     if(checkGameOver()) {
         setTimeout(endGame, 500);
     }
@@ -578,8 +620,9 @@ function updateScoreDisplay() {
 
 function checkGameOver() {
     if(animState.active) return false;
-    const left = inventory.filter(b=>b);
+    const left = inventory.filter(b => b);
     if(left.length === 0) return false;
+    
     for(let b of left) {
         for(let r=0; r<GRID_SIZE; r++) {
             for(let c=0; c<GRID_SIZE; c++) {
@@ -591,6 +634,9 @@ function checkGameOver() {
 }
 
 function endGame() {
+    // 播放音效
+    SoundManager.playGameOver();
+
     if (score > bestScore) {
         bestScore = score;
         localStorage.setItem(STORAGE_KEY, bestScore);
@@ -627,7 +673,9 @@ function confirmRestart() {
     resetGame();
 }
 
-// --- 5. 輸入處理 ---
+// ==========================================
+// 5. 輸入事件處理
+// ==========================================
 function getPos(e) {
     const rect = canvas.getBoundingClientRect();
     const cx = e.touches ? e.touches[0].clientX : e.clientX;
@@ -636,14 +684,18 @@ function getPos(e) {
 }
 
 function onDown(e) {
+    SoundManager.resume();
+
     if(animState.active) return;
     if(goOverlay.classList.contains('show') || confirmOverlay.classList.contains('show')) return;
     
     const p = getPos(e);
+    
     for(let i=0; i<inventory.length; i++) {
         const b = inventory[i];
         if(!b) continue;
         const hitX = b.x - 20, hitY = b.y - 20, hitW = b.w + 40, hitH = b.h + 40;
+        
         if(p.x >= hitX && p.x <= hitX+hitW && p.y >= hitY && p.y <= hitY+hitH) {
             e.preventDefault();
             dragging = { 
@@ -690,7 +742,9 @@ canvas.addEventListener('touchstart', onDown, {passive: false});
 window.addEventListener('touchmove', onMove, {passive: false});
 window.addEventListener('touchend', onUp);
 
-// --- 6. 繪圖 ---
+// ==========================================
+// 6. 繪圖循環
+// ==========================================
 function drawRoundedRect(ctx, x, y, w, h, r, color) {
     ctx.fillStyle = color;
     ctx.beginPath();
@@ -701,6 +755,7 @@ function drawRoundedRect(ctx, x, y, w, h, r, color) {
 function drawBlock(cells, ox, oy, size, color, alpha=1) {
     ctx.globalAlpha = alpha;
     ctx.fillStyle = color;
+    
     cells.forEach(([x,y]) => {
         const px = ox + x * size;
         const py = oy + y * size;
@@ -719,7 +774,6 @@ function drawBlock(cells, ox, oy, size, color, alpha=1) {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Grid BG
     for(let r=0; r<GRID_SIZE; r++) {
         for(let c=0; c<GRID_SIZE; c++) {
             drawRoundedRect(ctx, 
@@ -729,7 +783,6 @@ function draw() {
         }
     }
     
-    // Placed Blocks
     for(let r=0; r<GRID_SIZE; r++) {
         for(let c=0; c<GRID_SIZE; c++) {
             if(grid[r][c]) {
@@ -741,11 +794,11 @@ function draw() {
         }
     }
     
-    // Animation Overlay
     if(animState.active) {
         const elapsed = Date.now() - animState.startTime;
         const alpha = 0.3 + 0.4 * Math.abs(Math.sin(elapsed / 50)); 
         ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        
         animState.rows.forEach(r => {
             const x = BOARD_OFFSET_X;
             const y = BOARD_OFFSET_Y + r * CELL_SIZE;
@@ -762,7 +815,6 @@ function draw() {
         });
     }
 
-    // Inventory
     inventory.forEach((b, i) => {
         if(b && (!dragging || dragging.idx !== i)) {
             const size = CELL_SIZE * b.baseScale;
@@ -770,7 +822,6 @@ function draw() {
         }
     });
     
-    // Dragging
     if(dragging) {
         const b = dragging.block;
         let dx = dragging.currentX - dragging.offsetX;
