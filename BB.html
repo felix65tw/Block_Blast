@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Block Blast - Mobile Audio Ver.</title>
+    <title>Block Blast - Epic Chords Ver.</title>
     <style>
         :root {
             --bg-color: #1a1a24;
@@ -318,6 +318,7 @@ const SoundManager = {
         }
     },
 
+    // 播放單音
     playNote: function(freq, type, time, dur, vol) {
         if (!this.ctx) return;
         const osc = this.ctx.createOscillator();
@@ -334,6 +335,15 @@ const SoundManager = {
         
         osc.start(time);
         osc.stop(time + dur);
+    },
+
+    // 新增：播放和弦 (同時播放多個頻率)
+    playChord: function(freqs, type, time, dur, vol) {
+        // 因為同時播放多個音，音量要除以音符數量，避免爆音
+        const singleVol = vol / freqs.length;
+        freqs.forEach(f => {
+            this.playNote(f, type, time, dur, singleVol);
+        });
     },
 
     // 1. 放置方塊
@@ -356,33 +366,28 @@ const SoundManager = {
         this.playNote(1046.50, type, t + 0.20, 0.6, vol);
     },
 
-    // 3. 遊戲結束：【手機/喇叭優化版】
-    // 頻率控制在 130Hz - 400Hz 之間，確保小喇叭能聽清楚
+    // 3. 遊戲結束：【悲亢和弦版】
+    // 使用 Sawtooth (鋸齒波) 來模擬壯烈的銅管樂
+    // 每個步驟播放 3 個音符組成的和弦
     playGameOver: function() {
         if (!this.ctx) this.init();
         const t = this.ctx.currentTime;
-        const type = 'sawtooth'; // 鋸齒波，穿透力強
+        const type = 'sawtooth'; 
+        const vol = 0.35; // 總體音量 (內部會再除以3)
         
-        // 降低音量係數，避免爆音，但保持旋律清晰
-        const melodyVol = 0.25; 
-        const chordVol = 0.3;   
-        
-        // 旋律：半音階下行 (Chromatic Descent) - 表現悲劇感
-        // G4 -> F#4 -> F4 -> Eb4
-        this.playNote(392.00, type, t + 0.0, 0.6, melodyVol); // G4
-        this.playNote(369.99, type, t + 0.2, 0.6, melodyVol); // F#4
-        this.playNote(349.23, type, t + 0.4, 0.6, melodyVol); // F4
-        this.playNote(311.13, type, t + 0.6, 0.6, melodyVol); // Eb4
+        // 1. F Minor (F3, Ab3, F4) - 悲劇的開始
+        this.playChord([174.61, 207.65, 349.23], type, t + 0.0, 0.5, vol);
 
-        // 結局和弦：C Minor (C3 - Eb3 - G3)
-        // 最低音 C3 (130Hz) 是手機喇叭能發出聲音的有效下限
-        // 三個音一起發聲，營造厚實的悲亢感
-        const endT = t + 0.8;
-        const endDur = 2.5;
-        
-        this.playNote(130.81, type, endT, endDur, chordVol); // C3 (Root)
-        this.playNote(155.56, type, endT, endDur, chordVol); // Eb3 (Minor 3rd)
-        this.playNote(196.00, type, endT, endDur, chordVol); // G3 (5th)
+        // 2. Eb Major (Eb3, G3, Eb4) - 過渡
+        this.playChord([155.56, 196.00, 311.13], type, t + 0.4, 0.5, vol);
+
+        // 3. G Major (D3, B3, D4) - 張力 (Dominant)
+        // 注意：B3 是 246.94Hz
+        this.playChord([146.83, 246.94, 293.66], type, t + 0.8, 0.5, vol);
+
+        // 4. C Minor (C3, G3, Eb4) - 壯烈的結局
+        // 最低音 C3 (130Hz) 是安全範圍，上方疊加 G3 和 Eb4 (悲傷小三度)
+        this.playChord([130.81, 196.00, 311.13], type, t + 1.2, 2.5, vol);
     }
 };
 
