@@ -178,7 +178,7 @@
         }
 
         body.mobile #btn-manual-restart {
-            top: 666px;
+            top: 606px;
             bottom: auto;
         }
 
@@ -207,8 +207,10 @@
         }
         
         body.mobile #game-over-overlay {
-            top: 5%;
+            top: 25%;
             bottom: 0;
+            justify-content: flex-start;
+            padding-top: 0;
         }
         
         .overlay.show { opacity: 1; }
@@ -219,6 +221,10 @@
             margin: 0 0 30px 0;
             text-shadow: 0 0 10px rgba(255, 85, 85, 0.3);
             text-align: center;
+        }
+        
+        body.mobile #game-over-overlay .go-title {
+            margin-top: 25%;
         }
 
         .confirm-title {
@@ -236,6 +242,10 @@
             display: flex;
             gap: 40px;
             margin-bottom: 30px;
+        }
+        
+        body.mobile #game-over-overlay .stats-row {
+            margin-bottom: 20px;
         }
 
         .stat-item {
