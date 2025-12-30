@@ -144,7 +144,13 @@
         }
 
         #live-block-count { font-size: 16px; color: #4CAF50; font-weight: bold; }
-        #best-score { font-size: 16px; color: #FFD700; font-weight: bold; }
+        #best-score { 
+            font-size: 16px; 
+            color: #FFD700; 
+            font-weight: bold;
+            cursor: pointer; /* 添加指針樣式 */
+            transition: all 0.2s;
+        }
 
         canvas {
             display: block;
@@ -313,6 +319,30 @@
             50% { opacity: 1; }
             100% { opacity: 0.5; }
         }
+        
+        /* 新增：最高分歸零提示 */
+        .reset-notification {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            background: rgba(0, 0, 0, 0.9);
+            color: #ff5555;
+            padding: 20px 30px;
+            border-radius: 15px;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 1001;
+            text-align: center;
+            box-shadow: 0 0 30px rgba(255, 85, 85, 0.5);
+            border: 3px solid #ff5555;
+            pointer-events: none;
+            transition: transform 0.3s ease-out;
+        }
+        
+        .reset-notification.show {
+            transform: translate(-50%, -50%) scale(1);
+        }
     </style>
 </head>
 <body class="desktop">
@@ -379,6 +409,11 @@
         </div>
         
         <div id="device-info">Desktop Mode</div>
+    </div>
+    
+    <!-- 新增：最高分歸零提示 -->
+    <div id="reset-notification" class="reset-notification">
+        最高分已歸零！
     </div>
 
 <script>
@@ -523,6 +558,34 @@ const SoundManager = {
         // 短促的旋轉音效
         this.playNote(659.25, 'sine', t, 0.1, vol);
         this.playNote(783.99, 'sine', t + 0.05, 0.1, vol);
+    },
+
+    // 炸彈爆炸音效（統一音量為0.15）
+    playBombSound: function() {
+        if (!this.ctx) this.init();
+        const t = this.ctx.currentTime;
+        const type = 'square';
+        const vol = 0.15; // 統一音量
+        
+        // 爆炸音效：低音+高音爆破
+        this.playChord([87.31, 174.61, 349.23], type, t, 0.3, vol);
+        this.playChord([698.46, 1046.50, 1567.98], type, t + 0.1, 0.2, vol * 1.5);
+        this.playNote(523.25, 'sine', t + 0.2, 0.4, vol * 0.8);
+    },
+    
+    // 最高分歸零音效
+    playResetSound: function() {
+        if (!this.ctx) this.init();
+        const t = this.ctx.currentTime;
+        const type = 'sawtooth';
+        const vol = 0.15; // 統一音量
+        
+        // 下降音階，表示重置
+        this.playNote(1046.50, type, t, 0.2, vol);
+        this.playNote(783.99, type, t + 0.1, 0.2, vol);
+        this.playNote(523.25, type, t + 0.2, 0.2, vol);
+        this.playNote(349.23, type, t + 0.3, 0.3, vol);
+        this.playNote(174.61, type, t + 0.4, 0.5, vol);
     }
 };
 
@@ -534,6 +597,8 @@ const infoLabel = document.getElementById('device-info');
 const gameTitle = document.getElementById('game-title');
 const aiIndicator = document.getElementById('ai-indicator');
 const blocksCounter = document.getElementById('blocks-counter');
+const bestScoreEl = document.getElementById('best-score');
+const resetNotification = document.getElementById('reset-notification');
 let isMobile = false;
 
 function checkDevice() {
@@ -560,7 +625,6 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 const liveBlocksEl = document.getElementById('live-block-count');
-const bestScoreEl = document.getElementById('best-score'); 
 const goOverlay = document.getElementById('game-over-overlay');
 const confirmOverlay = document.getElementById('confirm-overlay');
 const finalScoreEl = document.getElementById('final-score');
@@ -599,6 +663,8 @@ let lastTitleClickTime = 0;
 let isHiddenMode = false;
 let blockCounterClickCount = 0;
 let lastBlockCounterClickTime = 0;
+let bestScoreClickCount = 0; // 新增：最高分點擊計數
+let lastBestScoreClickTime = 0; // 新增：最後點擊最高分時間
 let rotateButtons = [];
 
 const STORAGE_KEY = 'block_blast_best_score_v1';
@@ -612,8 +678,202 @@ let animState = {
     blockToPlace: null
 };
 
-// 新增：記錄每個庫存槽位的固定位置（用於放置旋轉按鈕）
-let slotPositions = [];
+// 新增：炸彈方塊相關變數
+let bombReady = false; // 是否已準備好炸彈方塊
+let nextBombScore = 500; // 下一個炸彈方塊的分數閾值
+
+// 新增：動畫效果系統
+let animations = {
+    rippleEffects: [], // 漣漪效果
+    chainEffects: [], // 連鎖特效
+    particleEffects: [], // 粒子效果
+    bombExplosions: [] // 炸彈爆炸效果
+};
+
+// 新增：動畫類別定義
+class RippleEffect {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.radius = 5;
+        this.maxRadius = CELL_SIZE * 1.5;
+        this.life = 1.0;
+        this.speed = 0.05;
+    }
+    
+    update() {
+        this.radius += 2;
+        this.life -= this.speed;
+        return this.life > 0;
+    }
+    
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = this.life * 0.7;
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class ChainEffect {
+    constructor(x, y, width, height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.life = 1.0;
+        this.speed = 0.03;
+        this.glowSize = 0;
+        this.maxGlowSize = 20;
+    }
+    
+    update() {
+        this.glowSize += 1.5;
+        this.life -= this.speed;
+        return this.life > 0;
+    }
+    
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = this.life * 0.8;
+        
+        // 炫光效果
+        const gradient = ctx.createRadialGradient(
+            this.x + this.width/2, this.y + this.height/2, 0,
+            this.x + this.width/2, this.y + this.height/2, this.glowSize
+        );
+        gradient.addColorStop(0, 'rgba(255, 255, 100, 0.9)');
+        gradient.addColorStop(0.7, 'rgba(255, 200, 50, 0.5)');
+        gradient.addColorStop(1, 'rgba(255, 150, 0, 0)');
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(
+            this.x - this.glowSize, 
+            this.y - this.glowSize, 
+            this.width + this.glowSize * 2, 
+            this.height + this.glowSize * 2
+        );
+        
+        ctx.restore();
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.size = Math.random() * 4 + 2;
+        this.speedX = Math.random() * 6 - 3;
+        this.speedY = Math.random() * 6 - 3;
+        this.life = 1.0;
+        this.decay = Math.random() * 0.05 + 0.02;
+        this.gravity = 0.1;
+    }
+    
+    update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        this.speedY += this.gravity;
+        this.life -= this.decay;
+        return this.life > 0;
+    }
+    
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class BombExplosion {
+    constructor(centerX, centerY) {
+        this.centerX = centerX;
+        this.centerY = centerY;
+        this.radius = 5;
+        this.maxRadius = CELL_SIZE * 1.8;
+        this.life = 1.0;
+        this.speed = 0.08;
+        this.particles = [];
+        
+        // 創建爆炸粒子
+        for (let i = 0; i < 30; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 3 + 2;
+            this.particles.push({
+                x: centerX,
+                y: centerY,
+                color: i % 2 === 0 ? '#FFD700' : '#FF9800',
+                size: Math.random() * 4 + 2,
+                speedX: Math.cos(angle) * speed,
+                speedY: Math.sin(angle) * speed,
+                life: 1.0,
+                decay: Math.random() * 0.03 + 0.02
+            });
+        }
+    }
+    
+    update() {
+        this.radius += 4;
+        this.life -= this.speed;
+        
+        // 更新粒子
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            const p = this.particles[i];
+            p.x += p.speedX;
+            p.y += p.speedY;
+            p.life -= p.decay;
+            
+            if (p.life <= 0) {
+                this.particles.splice(i, 1);
+            }
+        }
+        
+        return this.life > 0 || this.particles.length > 0;
+    }
+    
+    draw(ctx) {
+        ctx.save();
+        
+        // 繪製爆炸圓環
+        if (this.life > 0) {
+            ctx.globalAlpha = this.life * 0.6;
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(this.centerX, this.centerY, this.radius, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // 內層圓環
+            ctx.globalAlpha = this.life * 0.4;
+            ctx.strokeStyle = '#FF9800';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.centerX, this.centerY, this.radius * 0.7, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        
+        // 繪製粒子
+        this.particles.forEach(p => {
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        
+        ctx.restore();
+    }
+}
 
 // ==========================================
 // 3. 核心初始化
@@ -622,7 +882,7 @@ function resize() {
     const wrapper = document.getElementById('game-wrapper');
     const rect = wrapper.getBoundingClientRect();
     canvas.width = rect.width;
-    canvas.height = rect.height - 100; // 從 130 改為 100
+    canvas.height = rect.height - 100;
     
     const maxBoardWidth = canvas.width - 40;
     const maxBoardHeight = canvas.height * 0.55;
@@ -630,13 +890,12 @@ function resize() {
     
     BOARD_W = CELL_SIZE * GRID_SIZE;
     BOARD_OFFSET_X = (canvas.width - BOARD_W) / 2;
-    BOARD_OFFSET_Y = 7; // 從 20 改為 7
+    BOARD_OFFSET_Y = 7;
     
-    const BUTTON_RESERVE_SPACE = isMobile ? 25 : 50; // 從 30/60 改為 25/50
+    const BUTTON_RESERVE_SPACE = isMobile ? 25 : 50;
     const remainingHeight = canvas.height - BUTTON_RESERVE_SPACE - (BOARD_OFFSET_Y + BOARD_W);
     
-    // 修改這行：三個方塊與遊戲區的間距改為 17px
-    INVENTORY_Y = (BOARD_OFFSET_Y + BOARD_W) + 17; // 直接設為固定間距 17px
+    INVENTORY_Y = (BOARD_OFFSET_Y + BOARD_W) + 17;
     
     draw();
     if(inventory.length > 0) calcInventoryPos();
@@ -646,6 +905,7 @@ function loadBestScore() {
     const saved = localStorage.getItem(STORAGE_KEY);
     bestScore = saved ? parseInt(saved, 10) : 0;
     bestScoreEl.innerText = bestScore;
+    finalBestEl.innerText = bestScore;
 }
 
 function initGame() {
@@ -654,6 +914,18 @@ function initGame() {
     blocksUsed = 0;
     isHiddenMode = false;
     blockCounterClickCount = 0;
+    
+    // 重置炸彈系統
+    bombReady = false;
+    nextBombScore = 500;
+    
+    // 清空所有動畫
+    animations = {
+        rippleEffects: [],
+        chainEffects: [],
+        particleEffects: [],
+        bombExplosions: []
+    };
     
     loadBestScore();
     
@@ -676,9 +948,28 @@ function initGame() {
 
 function spawnBlocks() {
     inventory = [];
-    slotPositions = []; // 清空槽位位置記錄
     
-    for(let i=0; i<3; i++) {
+    // 檢查是否需要生成炸彈方塊
+    let bombAdded = false;
+    if (bombReady) {
+        // 生成炸彈方塊（單格，特殊顏色）
+        inventory.push({
+            cells: [[0,0]], 
+            color: "#FFD700", // 金色
+            shapeIndex: 0,
+            rotation: 0,
+            originalCells: [[0,0]],
+            x: 0, y: 0, w: 0, h: 0,
+            baseScale: BLOCK_SCALE,
+            isBomb: true // 標記為炸彈
+        });
+        bombAdded = true;
+        bombReady = false; // 重置炸彈狀態
+    }
+    
+    // 生成普通方塊
+    const blocksToGenerate = bombAdded ? 2 : 3;
+    for(let i=0; i<blocksToGenerate; i++) {
         const shapeIndex = Math.floor(Math.random() * SHAPES.length);
         const shape = SHAPES[shapeIndex];
         const color = COLORS[Math.floor(Math.random() * COLORS.length)];
@@ -686,20 +977,20 @@ function spawnBlocks() {
             cells: shape, 
             color: color,
             shapeIndex: shapeIndex,
-            rotation: 0, // 新增：方塊旋轉狀態 (0, 1, 2, 3 分別代表0°, 90°, 180°, 270°)
-            originalCells: shape, // 原始形狀
+            rotation: 0,
+            originalCells: shape,
             x: 0, y: 0, w: 0, h: 0,
-            baseScale: BLOCK_SCALE
+            baseScale: BLOCK_SCALE,
+            isBomb: false
         });
     }
+    
     calcInventoryPos();
     if(checkGameOver()) setTimeout(endGame, 100); 
 }
 
 function calcInventoryPos() {
     const sectionW = canvas.width / 3;
-    slotPositions = []; // 重置槽位位置
-    
     inventory.forEach((b, i) => {
         if(!b) return;
         
@@ -713,18 +1004,6 @@ function calcInventoryPos() {
         b.h = (mh+1) * realCell;
         b.x = (sectionW * i) + (sectionW - b.w)/2;
         b.y = INVENTORY_Y;
-        
-        // 記錄槽位的固定位置（用於放置旋轉按鈕）
-        const slotCenterX = (sectionW * i) + sectionW / 2;
-        const slotCenterY = INVENTORY_Y + (4 * realCell) / 2; // 使用固定高度（最大4格）
-        
-        slotPositions[i] = {
-            x: slotCenterX,
-            y: slotCenterY,
-            slotWidth: sectionW,
-            slotHeight: 4 * realCell, // 固定高度
-            slotIndex: i
-        };
     });
 }
 
@@ -732,14 +1011,11 @@ function calcInventoryPos() {
 function getRotatedCells(cells, rotation) {
     if (rotation === 0) return cells;
     
-    // 旋轉矩陣
     let rotated = [...cells];
     
     for (let r = 0; r < rotation; r++) {
-        // 順時針旋轉90度
         rotated = rotated.map(([x, y]) => [-y, x]);
         
-        // 正規化（確保所有座標為非負）
         const minX = Math.min(...rotated.map(cell => cell[0]));
         const minY = Math.min(...rotated.map(cell => cell[1]));
         
@@ -756,21 +1032,13 @@ function rotateBlock(blockIndex) {
     if (!isHiddenMode) return;
     
     const block = inventory[blockIndex];
-    if (!block) return;
+    if (!block || block.isBomb) return; // 炸彈不能旋轉
     
-    // 增加旋轉次數 (0 → 1 → 2 → 3 → 0)
     block.rotation = (block.rotation + 1) % 4;
-    
-    // 更新方塊形狀
     block.cells = getRotatedCells(block.originalCells, block.rotation);
     
-    // 重新計算位置
     calcInventoryPos();
-    
-    // 播放旋轉音效
     SoundManager.playRotateSound();
-    
-    // 重繪
     draw();
 }
 
@@ -792,10 +1060,63 @@ function tryPlaceBlock(b, gc, gr, invIndex) {
     blocksUsed++;
     liveBlocksEl.innerText = blocksUsed;
 
-    // 播放對應方塊的音效
+    // 檢查是否為炸彈方塊
+    if (b.isBomb) {
+        // 播放炸彈音效
+        SoundManager.playBombSound();
+        
+        // 創建炸彈爆炸效果
+        const centerX = BOARD_OFFSET_X + gc * CELL_SIZE + CELL_SIZE / 2;
+        const centerY = BOARD_OFFSET_Y + gr * CELL_SIZE + CELL_SIZE / 2;
+        animations.bombExplosions.push(new BombExplosion(centerX, centerY));
+        
+        // 消除3x3區域
+        let cellsCleared = 0;
+        for(let r = Math.max(0, gr-1); r <= Math.min(GRID_SIZE-1, gr+1); r++) {
+            for(let c = Math.max(0, gc-1); c <= Math.min(GRID_SIZE-1, gc+1); c++) {
+                if(grid[r][c]) {
+                    // 創建消除粒子效果
+                    const particleX = BOARD_OFFSET_X + c * CELL_SIZE + CELL_SIZE / 2;
+                    const particleY = BOARD_OFFSET_Y + r * CELL_SIZE + CELL_SIZE / 2;
+                    for(let i = 0; i < 5; i++) {
+                        animations.particleEffects.push(new Particle(particleX, particleY, grid[r][c]));
+                    }
+                    grid[r][c] = null;
+                    cellsCleared++;
+                }
+            }
+        }
+        
+        // 添加分數（每個消除的格子3分）
+        score += cellsCleared * 3;
+        updateScoreDisplay();
+        
+        // 標記炸彈已使用
+        inventory[invIndex] = null;
+        
+        // 檢查是否需要生成新炸彈
+        checkBombSpawn();
+        
+        // 添加放置漣漪效果
+        const centerCellX = BOARD_OFFSET_X + gc * CELL_SIZE + CELL_SIZE / 2;
+        const centerCellY = BOARD_OFFSET_Y + gr * CELL_SIZE + CELL_SIZE / 2;
+        animations.rippleEffects.push(new RippleEffect(centerCellX, centerCellY, "#FFD700"));
+        
+        afterTurn();
+        return;
+    }
+    
+    // 普通方塊處理
     if (b.shapeIndex !== undefined) {
         SoundManager.playBlockSound(b.shapeIndex);
     }
+    
+    // 添加放置漣漪效果（每個格子）
+    b.cells.forEach(([x,y]) => {
+        const cellX = BOARD_OFFSET_X + (gc + x) * CELL_SIZE + CELL_SIZE / 2;
+        const cellY = BOARD_OFFSET_Y + (gr + y) * CELL_SIZE + CELL_SIZE / 2;
+        animations.rippleEffects.push(new RippleEffect(cellX, cellY, b.color));
+    });
     
     b.cells.forEach(([x,y]) => grid[gr+y][gc+x] = b.color);
     
@@ -820,15 +1141,60 @@ function tryPlaceBlock(b, gc, gr, invIndex) {
         animState.rows = rows;
         animState.cols = cols;
         animState.blockToPlace = b;
+        
+        // 檢查是否為大型連鎖（3行/列以上）
+        const totalClears = rows.length + cols.length;
+        if (totalClears >= 3) {
+            // 添加連鎖炫光效果
+            if (rows.length > 0) {
+                const y = BOARD_OFFSET_Y + rows[0] * CELL_SIZE;
+                animations.chainEffects.push(new ChainEffect(
+                    BOARD_OFFSET_X, y, BOARD_W, rows.length * CELL_SIZE
+                ));
+            }
+            if (cols.length > 0) {
+                const x = BOARD_OFFSET_X + cols[0] * CELL_SIZE;
+                animations.chainEffects.push(new ChainEffect(
+                    x, BOARD_OFFSET_Y, cols.length * CELL_SIZE, BOARD_W
+                ));
+            }
+        }
+        
         setTimeout(finalizeClear, animState.duration);
     } else {
         score += b.cells.length;
         updateScoreDisplay();
+        checkBombSpawn();
         afterTurn();
     }
 }
 
 function finalizeClear() {
+    // 創建消除粒子效果
+    animState.rows.forEach(r => {
+        for(let c=0; c<GRID_SIZE; c++) {
+            if(grid[r][c]) {
+                const particleX = BOARD_OFFSET_X + c * CELL_SIZE + CELL_SIZE / 2;
+                const particleY = BOARD_OFFSET_Y + r * CELL_SIZE + CELL_SIZE / 2;
+                for(let i = 0; i < 8; i++) {
+                    animations.particleEffects.push(new Particle(particleX, particleY, grid[r][c]));
+                }
+            }
+        }
+    });
+    
+    animState.cols.forEach(c => {
+        for(let r=0; r<GRID_SIZE; r++) {
+            if(grid[r][c]) {
+                const particleX = BOARD_OFFSET_X + c * CELL_SIZE + CELL_SIZE / 2;
+                const particleY = BOARD_OFFSET_Y + r * CELL_SIZE + CELL_SIZE / 2;
+                for(let i = 0; i < 8; i++) {
+                    animations.particleEffects.push(new Particle(particleX, particleY, grid[r][c]));
+                }
+            }
+        }
+    });
+    
     animState.rows.forEach(r => grid[r].fill(null));
     animState.cols.forEach(c => { for(let r=0; r<GRID_SIZE; r++) grid[r][c]=null; });
     
@@ -836,11 +1202,27 @@ function finalizeClear() {
     score += count * 10 + (count * (count-1) * 5);
     
     updateScoreDisplay();
+    checkBombSpawn();
+    
     animState.active = false;
     animState.rows = [];
     animState.cols = [];
     
     afterTurn();
+}
+
+function checkBombSpawn() {
+    // 檢查是否達到炸彈生成分數
+    if (score >= nextBombScore && !bombReady) {
+        bombReady = true;
+        nextBombScore += 500; // 下一個炸彈在500分後
+        
+        // 更新UI提示（可選）
+        liveBlocksEl.innerHTML = '<span style="color:#FFD700">炸彈準備!</span>';
+        setTimeout(() => {
+            liveBlocksEl.innerHTML = blocksUsed;
+        }, 1500);
+    }
 }
 
 function afterTurn() {
@@ -860,6 +1242,7 @@ function updateScoreDisplay() {
     if (score > bestScore) {
         bestScore = score;
         bestScoreEl.innerText = bestScore;
+        finalBestEl.innerText = bestScore;
         localStorage.setItem(STORAGE_KEY, bestScore);
     }
 }
@@ -894,7 +1277,6 @@ function endGame() {
     goOverlay.style.display = 'flex';
     setTimeout(()=> goOverlay.classList.add('show'), 10);
     
-    // AI模式結束
     if (isAIMode) {
         stopAIMode();
     }
@@ -939,13 +1321,11 @@ function startAIMode() {
     aiIndicator.style.display = 'block';
     SoundManager.playAIStart();
     
-    // AI每1.5秒自動放置一個方塊
     aiInterval = setInterval(() => {
         if (!isAIMode || animState.active || goOverlay.classList.contains('show')) {
             return;
         }
         
-        // 找到第一個可用的方塊
         let blockIndex = -1;
         let block = null;
         
@@ -958,18 +1338,15 @@ function startAIMode() {
         }
         
         if (blockIndex === -1 || !block) {
-            // 沒有方塊可用，生成新方塊
             if (inventory.every(x => x === null)) {
                 spawnBlocks();
             }
             return;
         }
         
-        // 尋找最佳放置位置
         const bestPlace = findBestPlacement(block);
         
         if (bestPlace) {
-            // 模擬拖放效果
             dragging = {
                 idx: blockIndex,
                 block: block,
@@ -980,7 +1357,6 @@ function startAIMode() {
                 isTouch: false
             };
             
-            // 短暫延遲後放置方塊，讓玩家看到AI選擇的位置
             setTimeout(() => {
                 if (canPlace(block.cells, bestPlace.x, bestPlace.y)) {
                     tryPlaceBlock(block, bestPlace.x, bestPlace.y, blockIndex);
@@ -988,7 +1364,6 @@ function startAIMode() {
                 dragging = null;
             }, 300);
         } else {
-            // 沒有可放置的位置，檢查遊戲是否結束
             if (checkGameOver()) {
                 setTimeout(endGame, 500);
             }
@@ -1009,7 +1384,6 @@ function findBestPlacement(block) {
     let bestScore = -Infinity;
     let bestPosition = null;
     
-    // 評估每個可能的位置
     for (let r = 0; r < GRID_SIZE; r++) {
         for (let c = 0; c < GRID_SIZE; c++) {
             if (canPlace(block.cells, c, r)) {
@@ -1028,25 +1402,20 @@ function findBestPlacement(block) {
 function evaluatePlacement(block, col, row) {
     let score = 0;
     
-    // 暫時放置方塊來評估後果
     const tempGrid = JSON.parse(JSON.stringify(grid));
     
-    // 放置方塊
     block.cells.forEach(([x, y]) => {
         tempGrid[row + y][col + x] = block.color;
     });
     
-    // 計算潛在消除
     let potentialClears = 0;
     
-    // 檢查行
     for (let r = 0; r < GRID_SIZE; r++) {
         if (tempGrid[r].every(cell => cell !== null)) {
             potentialClears++;
         }
     }
     
-    // 檢查列
     for (let c = 0; c < GRID_SIZE; c++) {
         let fullColumn = true;
         for (let r = 0; r < GRID_SIZE; r++) {
@@ -1058,20 +1427,16 @@ function evaluatePlacement(block, col, row) {
         if (fullColumn) potentialClears++;
     }
     
-    // 基礎分數：消除越多越好
     score += potentialClears * 100;
     
-    // 位置分數：優先放在邊緣和角落
     if (col === 0 || col === GRID_SIZE-1) score += 5;
     if (row === 0 || row === GRID_SIZE-1) score += 5;
     
-    // 與其他方塊相鄰加分（有利於形成消除）
     let adjacency = 0;
     block.cells.forEach(([x, y]) => {
         const r = row + y;
         const c = col + x;
         
-        // 檢查上下左右是否有方塊
         if (r > 0 && grid[r-1][c]) adjacency++;
         if (r < GRID_SIZE-1 && grid[r+1][c]) adjacency++;
         if (c > 0 && grid[r][c-1]) adjacency++;
@@ -1089,7 +1454,6 @@ function evaluatePlacement(block, col, row) {
 blocksCounter.addEventListener('click', function() {
     const now = Date.now();
     
-    // 如果距離上次點擊超過1秒，重置計數
     if (now - lastBlockCounterClickTime > 1000) {
         blockCounterClickCount = 0;
     }
@@ -1097,18 +1461,15 @@ blocksCounter.addEventListener('click', function() {
     blockCounterClickCount++;
     lastBlockCounterClickTime = now;
     
-    // 視覺反饋
     this.style.transform = 'scale(1.1)';
     setTimeout(() => {
         this.style.transform = 'scale(1)';
     }, 150);
     
-    // 達到6次點擊
     if (blockCounterClickCount >= 6) {
         blockCounterClickCount = 0;
         isHiddenMode = !isHiddenMode;
         
-        // 顯示提示
         if (isHiddenMode) {
             liveBlocksEl.innerHTML = '<span style="color:#FFD700">旋轉模式</span>';
             setTimeout(() => {
@@ -1120,7 +1481,6 @@ blocksCounter.addEventListener('click', function() {
                 liveBlocksEl.innerHTML = blocksUsed;
             }, 2000);
             
-            // 重置所有方塊的旋轉狀態
             inventory.forEach(block => {
                 if (block) {
                     block.rotation = 0;
@@ -1140,7 +1500,6 @@ blocksCounter.addEventListener('click', function() {
 gameTitle.addEventListener('click', function() {
     const now = Date.now();
     
-    // 如果距離上次點擊超過1秒，重置計數
     if (now - lastTitleClickTime > 1000) {
         titleClickCount = 0;
     }
@@ -1148,13 +1507,11 @@ gameTitle.addEventListener('click', function() {
     titleClickCount++;
     lastTitleClickTime = now;
     
-    // 視覺反饋
     gameTitle.style.transform = 'scale(1.1)';
     setTimeout(() => {
         gameTitle.style.transform = 'scale(1)';
     }, 150);
     
-    // 達到6次點擊
     if (titleClickCount >= 6) {
         titleClickCount = 0;
         toggleAIMode();
@@ -1162,7 +1519,72 @@ gameTitle.addEventListener('click', function() {
 });
 
 // ==========================================
-// 8. 輸入事件處理
+// 8. 最高分歸零功能 (連續6次點擊最高分)
+// ==========================================
+bestScoreEl.addEventListener('click', function() {
+    const now = Date.now();
+    
+    // 如果距離上次點擊超過1秒，重置計數
+    if (now - lastBestScoreClickTime > 1000) {
+        bestScoreClickCount = 0;
+    }
+    
+    bestScoreClickCount++;
+    lastBestScoreClickTime = now;
+    
+    // 視覺反饋
+    this.style.transform = 'scale(1.1)';
+    this.style.color = '#ff5555'; // 變為紅色
+    setTimeout(() => {
+        this.style.transform = 'scale(1)';
+        this.style.color = '#FFD700'; // 恢復金色
+    }, 150);
+    
+    // 達到6次點擊
+    if (bestScoreClickCount >= 6) {
+        bestScoreClickCount = 0;
+        
+        // 播放重置音效
+        SoundManager.playResetSound();
+        
+        // 重置最高分
+        bestScore = 0;
+        bestScoreEl.innerText = "0";
+        finalBestEl.innerText = "0";
+        
+        // 清除本地存儲
+        localStorage.removeItem(STORAGE_KEY);
+        
+        // 顯示提示訊息
+        resetNotification.style.display = 'block';
+        setTimeout(() => {
+            resetNotification.classList.add('show');
+        }, 10);
+        
+        // 3秒後隱藏提示
+        setTimeout(() => {
+            resetNotification.classList.remove('show');
+            setTimeout(() => {
+                resetNotification.style.display = 'none';
+            }, 300);
+        }, 3000);
+        
+        // 視覺特效：最高分閃爍
+        let flashCount = 0;
+        const flashInterval = setInterval(() => {
+            bestScoreEl.style.visibility = (bestScoreEl.style.visibility === 'hidden') ? 'visible' : 'hidden';
+            flashCount++;
+            
+            if (flashCount >= 6) {
+                clearInterval(flashInterval);
+                bestScoreEl.style.visibility = 'visible';
+            }
+        }, 200);
+    }
+});
+
+// ==========================================
+// 9. 輸入事件處理
 // ==========================================
 function getPos(e) {
     const rect = canvas.getBoundingClientRect();
@@ -1179,7 +1601,6 @@ function onDown(e) {
     
     const p = getPos(e);
     
-    // 檢查是否點擊了旋轉按鈕
     for (let i = 0; i < rotateButtons.length; i++) {
         const btn = rotateButtons[i];
         if (p.x >= btn.x && p.x <= btn.x + btn.w &&
@@ -1190,12 +1611,10 @@ function onDown(e) {
         }
     }
     
-    // 檢查是否點擊了方塊
     for(let i=0; i<inventory.length; i++) {
         const b = inventory[i];
         if(!b) continue;
         
-        // 擴大點擊區域
         const hitX = b.x - 20, hitY = b.y - 20, hitW = b.w + 40, hitH = b.h + 40;
         
         if(p.x >= hitX && p.x <= hitX+hitW && p.y >= hitY && p.y <= hitY+hitH) {
@@ -1245,7 +1664,7 @@ window.addEventListener('touchmove', onMove, {passive: false});
 window.addEventListener('touchend', onUp);
 
 // ==========================================
-// 9. 繪圖循環
+// 10. 繪圖循環
 // ==========================================
 function drawRoundedRect(ctx, x, y, w, h, r, color) {
     ctx.fillStyle = color;
@@ -1270,6 +1689,43 @@ function drawBlock(cells, ox, oy, size, color, alpha=1) {
         ctx.fill();
         ctx.fillStyle = color;
     });
+    ctx.globalAlpha = 1;
+}
+
+// 繪製炸彈方塊（特殊樣式）
+function drawBombBlock(cells, ox, oy, size, color, alpha=1) {
+    ctx.globalAlpha = alpha;
+    
+    // 炸彈中心點
+    const centerX = ox + size/2;
+    const centerY = oy + size/2;
+    
+    // 繪製爆炸圖標
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    
+    // 爆炸光芒
+    ctx.fillStyle = color;
+    for(let i = 0; i < 8; i++) {
+        ctx.save();
+        ctx.rotate((Math.PI/4) * i);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, -size/2);
+        ctx.lineTo(size/8, -size/3);
+        ctx.lineTo(-size/8, -size/3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+    
+    // 中心圓
+    ctx.fillStyle = "#FF9800";
+    ctx.beginPath();
+    ctx.arc(0, 0, size/4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
     ctx.globalAlpha = 1;
 }
 
@@ -1323,57 +1779,68 @@ function draw() {
     // 清空旋轉按鈕陣列
     rotateButtons = [];
     
-    // 計算按鈕尺寸
-    const buttonSize = isMobile ? 22 : 24;
-    const fixedButtonSpacing = 15; // 按鈕與槽位邊緣的固定間距
-    
     // 繪製庫存方塊
     inventory.forEach((b, i) => {
         if(b && (!dragging || dragging.idx !== i)) {
             const size = CELL_SIZE * b.baseScale;
-            drawBlock(b.cells, b.x, b.y, size, b.color);
+            
+            // 檢查是否為炸彈方塊
+            if (b.isBomb) {
+                drawBombBlock(b.cells, b.x, b.y, size, b.color);
+            } else {
+                drawBlock(b.cells, b.x, b.y, size, b.color);
+            }
+            
+            // 在隱藏模式下繪製旋轉按鈕（炸彈不能旋轉）
+            if (isHiddenMode && !b.isBomb) {
+                const buttonSize = isMobile ? 22 : 24;
+                const buttonPadding = 5;
+                
+                let buttonX = b.x + b.w + buttonPadding;
+                let buttonY = b.y + b.h/2 - buttonSize/2;
+                
+                const spaceRight = canvas.width - (b.x + b.w);
+                const spaceLeft = b.x;
+                
+                if (spaceRight < buttonSize + buttonPadding * 2 && spaceLeft >= buttonSize + buttonPadding * 2) {
+                    buttonX = b.x - buttonSize - buttonPadding;
+                }
+                
+                if ((spaceRight < buttonSize + buttonPadding * 2) && (spaceLeft < buttonSize + buttonPadding * 2)) {
+                    buttonX = b.x + b.w - buttonSize - 2;
+                    buttonY = b.y + 2;
+                }
+                
+                rotateButtons.push({
+                    x: buttonX,
+                    y: buttonY,
+                    w: buttonSize,
+                    h: buttonSize,
+                    blockIndex: i
+                });
+                
+                ctx.fillStyle = "rgba(255, 215, 0, 0.9)";
+                ctx.beginPath();
+                ctx.arc(buttonX + buttonSize/2, buttonY + buttonSize/2, buttonSize/2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.strokeStyle = "#252530";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(buttonX + buttonSize/2, buttonY + buttonSize/2, buttonSize/2, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                ctx.fillStyle = "#252530";
+                ctx.font = `bold ${isMobile ? '12px' : '14px'} Arial`;
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("↻", buttonX + buttonSize/2, buttonY + buttonSize/2);
+            }
         }
     });
     
-    // 在隱藏模式下繪製旋轉按鈕（固定在槽位位置）
-    if (isHiddenMode) {
-        slotPositions.forEach((slot, i) => {
-            if (!inventory[i]) return; // 如果槽位沒有方塊，不繪製按鈕
-            
-            // 固定位置：槽位右側，垂直居中
-            let buttonX = slot.x + slot.slotWidth/2 - fixedButtonSpacing - buttonSize;
-            let buttonY = slot.y - buttonSize/2;
-            
-            // 保存按鈕資訊供點擊檢測
-            rotateButtons.push({
-                x: buttonX,
-                y: buttonY,
-                w: buttonSize,
-                h: buttonSize,
-                blockIndex: i
-            });
-            
-            // 繪製旋轉按鈕背景
-            ctx.fillStyle = "rgba(255, 215, 0, 0.9)";
-            ctx.beginPath();
-            ctx.arc(buttonX + buttonSize/2, buttonY + buttonSize/2, buttonSize/2, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // 繪製旋轉按鈕邊框
-            ctx.strokeStyle = "#252530";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(buttonX + buttonSize/2, buttonY + buttonSize/2, buttonSize/2, 0, Math.PI * 2);
-            ctx.stroke();
-            
-            // 繪製旋轉圖標
-            ctx.fillStyle = "#252530";
-            ctx.font = `bold ${isMobile ? '12px' : '14px'} Arial`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText("↻", buttonX + buttonSize/2, buttonY + buttonSize/2);
-        });
-    }
+    // 繪製動畫效果
+    drawAnimations();
     
     // 繪製拖曳中的方塊
     if(dragging) {
@@ -1394,8 +1861,54 @@ function draw() {
         ctx.shadowColor = "rgba(0,0,0,0.5)";
         ctx.shadowBlur = 15;
         ctx.shadowOffsetY = 15;
-        drawBlock(b.cells, dx, dy, CELL_SIZE, b.color);
+        
+        // 檢查是否為炸彈方塊
+        if (b.isBomb) {
+            drawBombBlock(b.cells, dx, dy, CELL_SIZE, b.color);
+        } else {
+            drawBlock(b.cells, dx, dy, CELL_SIZE, b.color);
+        }
+        
         ctx.shadowColor = "transparent";
+    }
+}
+
+// 繪製所有動畫效果
+function drawAnimations() {
+    // 更新並繪製漣漪效果
+    for (let i = animations.rippleEffects.length - 1; i >= 0; i--) {
+        if (!animations.rippleEffects[i].update()) {
+            animations.rippleEffects.splice(i, 1);
+        } else {
+            animations.rippleEffects[i].draw(ctx);
+        }
+    }
+    
+    // 更新並繪製連鎖特效
+    for (let i = animations.chainEffects.length - 1; i >= 0; i--) {
+        if (!animations.chainEffects[i].update()) {
+            animations.chainEffects.splice(i, 1);
+        } else {
+            animations.chainEffects[i].draw(ctx);
+        }
+    }
+    
+    // 更新並繪製粒子效果
+    for (let i = animations.particleEffects.length - 1; i >= 0; i--) {
+        if (!animations.particleEffects[i].update()) {
+            animations.particleEffects.splice(i, 1);
+        } else {
+            animations.particleEffects[i].draw(ctx);
+        }
+    }
+    
+    // 更新並繪製炸彈爆炸效果
+    for (let i = animations.bombExplosions.length - 1; i >= 0; i--) {
+        if (!animations.bombExplosions[i].update()) {
+            animations.bombExplosions.splice(i, 1);
+        } else {
+            animations.bombExplosions[i].draw(ctx);
+        }
     }
 }
 
@@ -1405,7 +1918,7 @@ function loop() {
 }
 
 // ==========================================
-// 10. 初始化遊戲
+// 11. 初始化遊戲
 // ==========================================
 loadBestScore();
 initGame();
