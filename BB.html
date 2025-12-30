@@ -71,8 +71,8 @@
 
         #ui-header {
             width: 100%;
-            padding-top: 30px; 
-            padding-bottom: 10px;
+            padding-top: 10px; 
+            padding-bottom: 0px;
             text-align: center;
             pointer-events: none;
             z-index: 5;
@@ -88,7 +88,7 @@
             text-transform: uppercase;
             letter-spacing: 2px;
             text-shadow: 0 2px 10px rgba(255, 215, 0, 0.3);
-            margin-bottom: 5px;
+            margin-bottom: 2px;
             cursor: pointer;
             pointer-events: auto;
             transition: transform 0.2s;
@@ -105,7 +105,7 @@
         }
 
         #score {
-            font-size: 56px;
+            font-size: 48px;
             font-weight: 800;
             color: white;
             line-height: 1;
@@ -114,7 +114,7 @@
         #score.pop { transform: scale(1.2); }
 
         .stats-row-container {
-            margin-top: 8px;
+            margin-top: 0px;
             display: flex;
             gap: 12px;
         }
@@ -597,7 +597,7 @@ function resize() {
     const wrapper = document.getElementById('game-wrapper');
     const rect = wrapper.getBoundingClientRect();
     canvas.width = rect.width;
-    canvas.height = rect.height - 130; 
+    canvas.height = rect.height - 100; // 從 130 改為 100
     
     const maxBoardWidth = canvas.width - 40;
     const maxBoardHeight = canvas.height * 0.55;
@@ -605,12 +605,14 @@ function resize() {
     
     BOARD_W = CELL_SIZE * GRID_SIZE;
     BOARD_OFFSET_X = (canvas.width - BOARD_W) / 2;
-    BOARD_OFFSET_Y = 20;
-
-    const BUTTON_RESERVE_SPACE = 60; 
+    BOARD_OFFSET_Y = 7; // 從 20 改為 7
+    
+    const BUTTON_RESERVE_SPACE = isMobile ? 25 : 50; // 從 30/60 改為 25/50
     const remainingHeight = canvas.height - BUTTON_RESERVE_SPACE - (BOARD_OFFSET_Y + BOARD_W);
-    INVENTORY_Y = (BOARD_OFFSET_Y + BOARD_W) + (remainingHeight / 2) - (CELL_SIZE * 1.5);
-
+    
+    // 修改這行：三個方塊與遊戲區的間距改為 17px
+    INVENTORY_Y = (BOARD_OFFSET_Y + BOARD_W) + 17; // 直接設為固定間距 17px
+    
     draw();
     if(inventory.length > 0) calcInventoryPos();
 }
@@ -1280,10 +1282,8 @@ function draw() {
     // 清空旋轉按鈕陣列
     rotateButtons = [];
     
-    // 計算可用於旋轉按鈕的安全區域
-    // 確保旋轉按鈕不會與RESTART按鈕重疊
-    const restartButtonTop = canvas.height - 60; // RESTART按鈕頂部位置
-    const buttonSize = 24;
+    // 計算按鈕安全區域
+    const buttonSize = isMobile ? 22 : 24; // 手機版按鈕小一點
     const buttonPadding = 5;
     
     // 繪製庫存方塊
@@ -1298,28 +1298,19 @@ function draw() {
                 let buttonX = b.x + b.w + buttonPadding;
                 let buttonY = b.y + b.h/2 - buttonSize/2;
                 
-                // 檢查是否超出畫布右邊界
-                if (buttonX + buttonSize > canvas.width) {
-                    // 如果超出右邊界，放在左側
+                // 固定位置邏輯：如果右側空間不足，放在左側
+                const spaceRight = canvas.width - (b.x + b.w);
+                const spaceLeft = b.x;
+                
+                if (spaceRight < buttonSize + buttonPadding * 2 && spaceLeft >= buttonSize + buttonPadding * 2) {
+                    // 右側空間不足但左側足夠，放在左側
                     buttonX = b.x - buttonSize - buttonPadding;
                 }
                 
-                // 檢查是否超出畫布左邊界
-                if (buttonX < 0) {
-                    // 如果超出左邊界，放回右側（即使可能部分超出）
-                    buttonX = b.x + b.w + buttonPadding;
-                }
-                
-                // 檢查是否與RESTART按鈕重疊
-                if (buttonY + buttonSize > restartButtonTop) {
-                    // 如果與RESTART按鈕重疊，向上移動
-                    buttonY = restartButtonTop - buttonSize - buttonPadding;
-                }
-                
-                // 檢查是否超出畫布頂部
-                if (buttonY < 0) {
-                    // 如果超出頂部，向下移動
-                    buttonY = 0;
+                // 如果左右空間都不足，放在方塊內部右上角
+                if ((spaceRight < buttonSize + buttonPadding * 2) && (spaceLeft < buttonSize + buttonPadding * 2)) {
+                    buttonX = b.x + b.w - buttonSize - 2;
+                    buttonY = b.y + 2;
                 }
                 
                 // 保存按鈕資訊供點擊檢測
@@ -1346,7 +1337,7 @@ function draw() {
                 
                 // 繪製旋轉圖標
                 ctx.fillStyle = "#252530";
-                ctx.font = "bold 14px Arial";
+                ctx.font = `bold ${isMobile ? '12px' : '14px'} Arial`;
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 ctx.fillText("↻", buttonX + buttonSize/2, buttonY + buttonSize/2);
