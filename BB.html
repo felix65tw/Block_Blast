@@ -612,6 +612,9 @@ let animState = {
     blockToPlace: null
 };
 
+// 新增：記錄每個庫存槽位的固定位置（用於放置旋轉按鈕）
+let slotPositions = [];
+
 // ==========================================
 // 3. 核心初始化
 // ==========================================
@@ -673,6 +676,8 @@ function initGame() {
 
 function spawnBlocks() {
     inventory = [];
+    slotPositions = []; // 清空槽位位置記錄
+    
     for(let i=0; i<3; i++) {
         const shapeIndex = Math.floor(Math.random() * SHAPES.length);
         const shape = SHAPES[shapeIndex];
@@ -693,6 +698,8 @@ function spawnBlocks() {
 
 function calcInventoryPos() {
     const sectionW = canvas.width / 3;
+    slotPositions = []; // 重置槽位位置
+    
     inventory.forEach((b, i) => {
         if(!b) return;
         
@@ -706,6 +713,18 @@ function calcInventoryPos() {
         b.h = (mh+1) * realCell;
         b.x = (sectionW * i) + (sectionW - b.w)/2;
         b.y = INVENTORY_Y;
+        
+        // 記錄槽位的固定位置（用於放置旋轉按鈕）
+        const slotCenterX = (sectionW * i) + sectionW / 2;
+        const slotCenterY = INVENTORY_Y + (4 * realCell) / 2; // 使用固定高度（最大4格）
+        
+        slotPositions[i] = {
+            x: slotCenterX,
+            y: slotCenterY,
+            slotWidth: sectionW,
+            slotHeight: 4 * realCell, // 固定高度
+            slotIndex: i
+        };
     });
 }
 
@@ -1304,68 +1323,57 @@ function draw() {
     // 清空旋轉按鈕陣列
     rotateButtons = [];
     
-    // 計算按鈕安全區域
-    const buttonSize = isMobile ? 22 : 24; // 手機版按鈕小一點
-    const buttonPadding = 5;
+    // 計算按鈕尺寸
+    const buttonSize = isMobile ? 22 : 24;
+    const fixedButtonSpacing = 15; // 按鈕與槽位邊緣的固定間距
     
     // 繪製庫存方塊
     inventory.forEach((b, i) => {
         if(b && (!dragging || dragging.idx !== i)) {
             const size = CELL_SIZE * b.baseScale;
             drawBlock(b.cells, b.x, b.y, size, b.color);
-            
-            // 在隱藏模式下繪製旋轉按鈕
-            if (isHiddenMode) {
-                // 固定位置：方塊右側，垂直居中
-                let buttonX = b.x + b.w + buttonPadding;
-                let buttonY = b.y + b.h/2 - buttonSize/2;
-                
-                // 固定位置邏輯：如果右側空間不足，放在左側
-                const spaceRight = canvas.width - (b.x + b.w);
-                const spaceLeft = b.x;
-                
-                if (spaceRight < buttonSize + buttonPadding * 2 && spaceLeft >= buttonSize + buttonPadding * 2) {
-                    // 右側空間不足但左側足夠，放在左側
-                    buttonX = b.x - buttonSize - buttonPadding;
-                }
-                
-                // 如果左右空間都不足，放在方塊內部右上角
-                if ((spaceRight < buttonSize + buttonPadding * 2) && (spaceLeft < buttonSize + buttonPadding * 2)) {
-                    buttonX = b.x + b.w - buttonSize - 2;
-                    buttonY = b.y + 2;
-                }
-                
-                // 保存按鈕資訊供點擊檢測
-                rotateButtons.push({
-                    x: buttonX,
-                    y: buttonY,
-                    w: buttonSize,
-                    h: buttonSize,
-                    blockIndex: i
-                });
-                
-                // 繪製旋轉按鈕背景
-                ctx.fillStyle = "rgba(255, 215, 0, 0.9)";
-                ctx.beginPath();
-                ctx.arc(buttonX + buttonSize/2, buttonY + buttonSize/2, buttonSize/2, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // 繪製旋轉按鈕邊框
-                ctx.strokeStyle = "#252530";
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(buttonX + buttonSize/2, buttonY + buttonSize/2, buttonSize/2, 0, Math.PI * 2);
-                ctx.stroke();
-                
-                // 繪製旋轉圖標
-                ctx.fillStyle = "#252530";
-                ctx.font = `bold ${isMobile ? '12px' : '14px'} Arial`;
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText("↻", buttonX + buttonSize/2, buttonY + buttonSize/2);
-            }
         }
     });
+    
+    // 在隱藏模式下繪製旋轉按鈕（固定在槽位位置）
+    if (isHiddenMode) {
+        slotPositions.forEach((slot, i) => {
+            if (!inventory[i]) return; // 如果槽位沒有方塊，不繪製按鈕
+            
+            // 固定位置：槽位右側，垂直居中
+            let buttonX = slot.x + slot.slotWidth/2 - fixedButtonSpacing - buttonSize;
+            let buttonY = slot.y - buttonSize/2;
+            
+            // 保存按鈕資訊供點擊檢測
+            rotateButtons.push({
+                x: buttonX,
+                y: buttonY,
+                w: buttonSize,
+                h: buttonSize,
+                blockIndex: i
+            });
+            
+            // 繪製旋轉按鈕背景
+            ctx.fillStyle = "rgba(255, 215, 0, 0.9)";
+            ctx.beginPath();
+            ctx.arc(buttonX + buttonSize/2, buttonY + buttonSize/2, buttonSize/2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 繪製旋轉按鈕邊框
+            ctx.strokeStyle = "#252530";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(buttonX + buttonSize/2, buttonY + buttonSize/2, buttonSize/2, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // 繪製旋轉圖標
+            ctx.fillStyle = "#252530";
+            ctx.font = `bold ${isMobile ? '12px' : '14px'} Arial`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("↻", buttonX + buttonSize/2, buttonY + buttonSize/2);
+        });
+    }
     
     // 繪製拖曳中的方塊
     if(dragging) {
