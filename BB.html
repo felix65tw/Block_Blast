@@ -177,6 +177,11 @@
             -webkit-user-select: none;
         }
 
+        body.mobile #btn-manual-restart {
+            top: 666px;
+            bottom: auto;
+        }
+
         #btn-manual-restart:hover {
             background: var(--accent);
             color: #252530;
@@ -200,6 +205,12 @@
             opacity: 0;
             transition: opacity 0.3s;
         }
+        
+        body.mobile #game-over-overlay {
+            top: 333px;
+            bottom: 0;
+        }
+        
         .overlay.show { opacity: 1; }
 
         .go-title {
