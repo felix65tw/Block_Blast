@@ -144,6 +144,16 @@
         }
 
         #live-block-count { font-size: 16px; color: #4CAF50; font-weight: bold; }
+        #bomb-count { 
+            font-size: 16px; 
+            color: #FF9800; 
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        #bomb-count.ready { 
+            color: #FFD700;
+            text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+        }
         #best-score { 
             font-size: 16px; 
             color: #FFD700; 
@@ -361,6 +371,15 @@
             90% { transform: translate(-5px, 5px); }
             100% { transform: translate(0, 0); }
         }
+        
+        /* AI模式下炸彈統計的特殊樣式 */
+        #bomb-counter {
+            display: none;
+        }
+        
+        #bomb-counter.ai-mode {
+            display: flex;
+        }
     </style>
 </head>
 <body class="desktop">
@@ -376,6 +395,10 @@
                     <div class="live-stats" id="blocks-counter">
                         <span class="live-label">BLOCKS</span>
                         <span id="live-block-count">0</span>
+                    </div>
+                    <div class="live-stats" id="bomb-counter">
+                        <span class="live-label">BOMBS</span>
+                        <span id="bomb-count">0</span>
                     </div>
                     <div class="live-stats">
                         <span class="live-label">BEST</span>
@@ -631,6 +654,10 @@ const finalScoreEl = document.getElementById('final-score');
 const finalBlocksEl = document.getElementById('final-blocks');
 const finalBestEl = document.getElementById('final-best'); 
 
+// 新增炸彈統計相關元素
+const bombCounter = document.getElementById('bomb-counter');
+const bombCountEl = document.getElementById('bomb-count');
+
 const GRID_SIZE = 8;
 const COLORS = ["#FF5252", "#4CAF50", "#2196F3", "#FFC107", "#00BCD4", "#E040FB", "#FF9800"];
 const SHAPES = [
@@ -660,6 +687,13 @@ let bestScoreClickCount = 0;
 let lastBestScoreClickTime = 0;
 let rotateButtons = [];
 
+// 新增AI模式炸彈統計
+let aiBombsUsed = 0;
+
+// 左上角位置点击计数
+let topLeftClickCount = 0;
+let lastTopLeftClickTime = 0;
+
 const STORAGE_KEY = 'block_blast_best_score_v1';
 
 let animState = {
@@ -673,6 +707,7 @@ let animState = {
 
 let bombReady = false;
 let nextBombScore = 500;
+let BombScore = 500;
 
 let animations = {
     rippleEffects: [],
@@ -1229,8 +1264,13 @@ function initGame() {
     isHiddenMode = false;
     blockCounterClickCount = 0;
     
+    // 重置AI模式炸彈統計
+    aiBombsUsed = 0;
+    bombCountEl.innerText = "0";
+    bombCountEl.classList.remove("ready");
+    
     bombReady = false;
-    nextBombScore = 500;
+    nextBombScore = BombScore;  /* 此處應該是 500  */
     
     animations = {
         rippleEffects: [],
@@ -1315,8 +1355,20 @@ function calcInventoryPos() {
         const realCell = CELL_SIZE * b.baseScale;
         b.w = (mw+1) * realCell;
         b.h = (mh+1) * realCell;
-        b.x = (sectionW * i) + (sectionW - b.w)/2;
-        b.y = INVENTORY_Y;
+        
+        // 计算区域中心坐标
+        const sectionCenterX = (sectionW * i) + (sectionW / 2);
+        const sectionCenterY = INVENTORY_Y + 40; // 固定在库存区域中心
+        
+        // 调整方块位置，使其中心与区域中心对齐
+        b.x = sectionCenterX - (b.w / 2);
+        b.y = sectionCenterY - (b.h / 2);
+        
+        // 确保方块不超出画布边界
+        if (b.x < 0) b.x = 0;
+        if (b.x + b.w > canvas.width) b.x = canvas.width - b.w;
+        if (b.y < INVENTORY_Y) b.y = INVENTORY_Y;
+        if (b.y + b.h > canvas.height) b.y = canvas.height - b.h;
     });
 }
 
@@ -1326,13 +1378,39 @@ function getRotatedCells(cells, rotation) {
     let rotated = [...cells];
     
     for (let r = 0; r < rotation; r++) {
-        rotated = rotated.map(([x, y]) => [-y, x]);
-        
+        // 计算原始边界框
         const minX = Math.min(...rotated.map(cell => cell[0]));
+        const maxX = Math.max(...rotated.map(cell => cell[0]));
         const minY = Math.min(...rotated.map(cell => cell[1]));
+        const maxY = Math.max(...rotated.map(cell => cell[1]));
         
-        if (minX < 0 || minY < 0) {
-            rotated = rotated.map(([x, y]) => [x - minX, y - minY]);
+        // 计算边界框的中心点（这是旋转的轴心）
+        const centerX = minX + Math.floor((maxX - minX) / 2);
+        const centerY = minY + Math.floor((maxY - minY) / 2);
+        
+        // 旋转90度顺时针，围绕中心点
+        rotated = rotated.map(([x, y]) => {
+            // 计算相对于中心点的坐标
+            const dx = x - centerX;
+            const dy = y - centerY;
+            
+            // 旋转90度顺时针：(x, y) -> (y, -x)
+            const newDx = dy;
+            const newDy = -dx;
+            
+            // 转换回绝对坐标
+            return [newDx + centerX, newDy + centerY];
+        });
+        
+        // 计算旋转后的边界框
+        const newMinX = Math.min(...rotated.map(cell => cell[0]));
+        const newMinY = Math.min(...rotated.map(cell => cell[1]));
+        
+        // 确保所有坐标都是非负数
+        if (newMinX < 0 || newMinY < 0) {
+            const offsetX = newMinX < 0 ? -newMinX : 0;
+            const offsetY = newMinY < 0 ? -newMinY : 0;
+            rotated = rotated.map(([x, y]) => [x + offsetX, y + offsetY]);
         }
     }
     
@@ -1377,6 +1455,12 @@ function tryPlaceBlock(b, gc, gr, invIndex) {
         
         // 觸發屏幕震動
         screenShake.start(15, 300);
+        
+        // 更新AI模式炸彈統計
+        if (isAIMode) {
+            aiBombsUsed++;
+            bombCountEl.innerText = aiBombsUsed;
+        }
         
         // 創建炸彈爆炸效果
         const centerX = BOARD_OFFSET_X + gc * CELL_SIZE + CELL_SIZE / 2;
@@ -1532,7 +1616,12 @@ function finalizeClear() {
 function checkBombSpawn() {
     if (score >= nextBombScore && !bombReady) {
         bombReady = true;
-        nextBombScore += 500;
+        nextBombScore += BombScore;   /* 此處應該是 500  */
+        
+        // 如果炸彈準備好，更新炸彈計數器顯示
+        if (isAIMode) {
+            bombCountEl.classList.add("ready");
+        }
         
         liveBlocksEl.innerHTML = '<span style="color:#FFD700">炸彈準備!</span>';
         setTimeout(() => {
@@ -1637,6 +1726,15 @@ function startAIMode() {
     aiIndicator.style.display = 'block';
     SoundManager.playAIStart();
     
+    // 顯示炸彈統計
+    bombCounter.classList.add('ai-mode');
+    bombCountEl.innerText = aiBombsUsed;
+    
+    // 如果炸彈準備好，顯示特殊樣式
+    if (bombReady) {
+        bombCountEl.classList.add("ready");
+    }
+    
     aiInterval = setInterval(() => {
         if (!isAIMode || animState.active || goOverlay.classList.contains('show')) {
             return;
@@ -1690,6 +1788,10 @@ function startAIMode() {
 function stopAIMode() {
     isAIMode = false;
     aiIndicator.style.display = 'none';
+    // 隱藏炸彈統計
+    bombCounter.classList.remove('ai-mode');
+    bombCountEl.classList.remove("ready");
+    
     if (aiInterval) {
         clearInterval(aiInterval);
         aiInterval = null;
@@ -1908,6 +2010,61 @@ function onDown(e) {
     
     const p = getPos(e);
     
+    // 检测是否点击左上角(0,0)位置
+    const gridX = Math.floor((p.x - BOARD_OFFSET_X) / CELL_SIZE);
+    const gridY = Math.floor((p.y - BOARD_OFFSET_Y) / CELL_SIZE);
+    
+    if (gridX === 0 && gridY === 0) {
+        const now = Date.now();
+        
+        if (now - lastTopLeftClickTime > 1000) {
+            topLeftClickCount = 0;
+        }
+        
+        topLeftClickCount++;
+        lastTopLeftClickTime = now;
+        
+        // 连续点击6次，替换一个方块为炸弹
+        if (topLeftClickCount >= 6) {
+            topLeftClickCount = 0;
+            
+            // 检查是否已经有炸弹
+            const hasBomb = inventory.some(block => block && block.isBomb);
+            if (!hasBomb) {
+                // 查找一个非空方块的位置
+                const nonBombBlocks = inventory.map((block, index) => ({ block, index }))
+                    .filter(item => item.block && !item.block.isBomb);
+                
+                if (nonBombBlocks.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * nonBombBlocks.length);
+                    const targetIndex = nonBombBlocks[randomIndex].index;
+                    
+                    // 直接替换为炸弹
+                    inventory[targetIndex] = {
+                        cells: [[0,0]], 
+                        color: "#FFD700",
+                        shapeIndex: 0,
+                        rotation: 0,
+                        originalCells: [[0,0]],
+                        x: 0, y: 0, w: 0, h: 0,
+                        baseScale: BLOCK_SCALE,
+                        isBomb: true
+                    };
+                    
+                    // 重新计算位置
+                    calcInventoryPos();
+                    draw();
+                    
+                    // 显示提示
+                    liveBlocksEl.innerHTML = '<span style="color:#FFD700">炸彈已添加!</span>';
+                    setTimeout(() => {
+                        liveBlocksEl.innerHTML = blocksUsed;
+                    }, 2000);
+                }
+            }
+        }
+    }
+    
     for (let i = 0; i < rotateButtons.length; i++) {
         const btn = rotateButtons[i];
         if (p.x >= btn.x && p.x <= btn.x + btn.w &&
@@ -2009,24 +2166,11 @@ function drawBombBlock(cells, ox, oy, size, color, alpha=1) {
     ctx.save();
     ctx.translate(centerX, centerY);
     
-    ctx.fillStyle = color;
-    for(let i = 0; i < 8; i++) {
-        ctx.save();
-        ctx.rotate((Math.PI/4) * i);
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(0, -size/2);
-        ctx.lineTo(size/8, -size/3);
-        ctx.lineTo(-size/8, -size/3);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-    }
-    
-    ctx.fillStyle = "#FF9800";
-    ctx.beginPath();
-    ctx.arc(0, 0, size/4, 0, Math.PI * 2);
-    ctx.fill();
+    // 使用emoji作为炸弹图标
+    ctx.font = `${size * 0.8}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🧨', 0, 0);
     
     ctx.restore();
     ctx.globalAlpha = 1;
@@ -2092,19 +2236,16 @@ function draw() {
                 const buttonSize = isMobile ? 22 : 24;
                 const buttonPadding = 5;
                 
-                let buttonX = b.x + b.w + buttonPadding;
-                let buttonY = b.y + b.h/2 - buttonSize/2;
+                // 固定位置：每个方块区域的底部中心
+                const sectionW = canvas.width / 3;
+                let buttonX = (sectionW * i) + (sectionW / 2) - (buttonSize / 2);
+                let buttonY = INVENTORY_Y + 90; // 固定在库存区域下方
                 
-                const spaceRight = canvas.width - (b.x + b.w);
-                const spaceLeft = b.x;
-                
-                if (spaceRight < buttonSize + buttonPadding * 2 && spaceLeft >= buttonSize + buttonPadding * 2) {
-                    buttonX = b.x - buttonSize - buttonPadding;
-                }
-                
-                if ((spaceRight < buttonSize + buttonPadding * 2) && (spaceLeft < buttonSize + buttonPadding * 2)) {
-                    buttonX = b.x + b.w - buttonSize - 2;
-                    buttonY = b.y + 2;
+                // 确保按钮不超出画布边界
+                if (buttonX < 0) buttonX = 0;
+                if (buttonX + buttonSize > canvas.width) buttonX = canvas.width - buttonSize;
+                if (buttonY + buttonSize > canvas.height) {
+                    buttonY = canvas.height - buttonSize - 10;
                 }
                 
                 rotateButtons.push({
