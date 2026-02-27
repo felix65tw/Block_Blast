@@ -2070,6 +2070,14 @@ function onDown(e) {
     // 防止触摸事件重复触发
     if (e.touches && e.touches.length > 1) return; // 只处理单点触摸
     
+    // 防止触摸事件被浏览器模拟为鼠标事件
+    if (e.pointerType === 'touch' || e.touches) {
+        // 这是触摸事件，允许处理
+    } else if (e.pointerType === 'mouse' || !e.touches) {
+        // 这是鼠标事件，检查是否有对应的触摸事件
+        if (isMobile) return; // 在移动设备上忽略鼠标事件
+    }
+    
     const p = getPos(e);
     
     // 检测是否点击左上角(0,0)位置
