@@ -194,7 +194,7 @@
         }
 
         body.mobile #btn-manual-restart {
-            top: 680px;      /* 原始位置是 636px */
+            top: 650px;      /* 原始位置是 636px */
             bottom: auto;
         }
 
@@ -2067,6 +2067,9 @@ function onDown(e) {
     if(animState.active) return;
     if(goOverlay.classList.contains('show') || confirmOverlay.classList.contains('show')) return;
     
+    // 防止触摸事件重复触发
+    if (e.touches && e.touches.length > 1) return; // 只处理单点触摸
+    
     const p = getPos(e);
     
     // 检测是否点击左上角(0,0)位置
@@ -2079,6 +2082,9 @@ function onDown(e) {
         if (now - lastTopLeftClickTime > 1000) {
             topLeftClickCount = 0;
         }
+        
+        // 防止快速连续触发（防抖动）
+        if (now - lastTopLeftClickTime < 100) return; // 100ms内的点击视为一次
         
         topLeftClickCount++;
         lastTopLeftClickTime = now;
